@@ -18,11 +18,11 @@ var LSCmd = &cobra.Command{
 		if err != nil {
 			panic(err)
 		}
-
 		err = flock.Lock()
 		if err != nil {
 			panic(err)
 		}
+		defer flock.Release()
 
 		s := json_struct.ImageInfoStruct{}
 		s.ParseFromFile("/var/lib/podkit/images/image_info.json")
@@ -32,11 +32,6 @@ var LSCmd = &cobra.Command{
 
 		for k := range s.ImageTarFilename {
 			fmt.Println(k)
-		}
-
-		err = flock.Release()
-		if err != nil {
-			panic(err)
 		}
 	},
 }

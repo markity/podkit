@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"os/exec"
 	"strconv"
@@ -39,9 +38,12 @@ func main() {
 	}
 }
 
-// stage1: 创建自己的守护进程, 进入stage2
+// stage1: 创建自己的守护进程, 进入stage2, 务必让stage2进入listen之后再结束程序
+// 因此这里用了pipe做通讯
 func stage1(id int) {
+	pipeReader, pipeWriter := io.Pipe()
 	cmd := exec.Command("podkit_shim", "stage2", fmt.Sprintf("%d", id))
+	cmd.Stdout = pipeWriter
 	_, err := syscall.Setsid()
 	if err != nil {
 		panic(err)
@@ -51,13 +53,21 @@ func stage1(id int) {
 	if err != nil {
 		panic(err)
 	}
+
+	// 等待stage2进入监听状态之后才能结束这个程序
+	bs := make([]byte, 1)
+	_, err = pipeReader.Read(bs)
+	if err != nil {
+		panic(err)
+	}
 }
 
 // stage2: 需要fork一个子进程作为容器的init进程(podkit_orphan_reaper), 同时监听过来的网络连接, 向容器插入进程
-// 需要的参数: 容器的id
 func stage2(id int) {
 	syscall.Umask(0)
 
+	// 需要等待stage3完成挂载, 创建设备节点, 创建软链接等工作之后再进入监听状态
+	// 因此这里用了pipe
 	cmd := exec.Command("podkit_shim", "stage3", fmt.Sprintf("%d", id))
 	pipeReader, pipeWriter := io.Pipe()
 	cmd.Stdout = pipeWriter
@@ -77,38 +87,26 @@ func stage2(id int) {
 		panic(err)
 	}
 
-	// 下面监听网络连接, 操作容器
-	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: fmt.Sprintf("/var/lib/podkit/socket/%d.sock", id), Net: "unix"})
+	listenFinished := make(chan struct{})
+	listenClosed := make(chan struct{})
+	go RunServer(id, listenFinished, listenClosed)
+
+	<-listenFinished
+	_, err = syscall.Write(1, []byte{1})
 	if err != nil {
 		panic(err)
 	}
 
-	for {
-		c, err := listener.Accept()
-		if err != nil {
-			continue
-		}
-
-		go func() {
-		}()
-	}
+	// 等待listener退出
+	<-listenClosed
 }
 
 // 挂载文件, exec成为orphan_reaper
 func stage3(id int) {
-	n, err := sysconf.Sysconf(sysconf.SC_OPEN_MAX)
-	if err != nil {
-		panic(err)
-	}
-	syscall.Close(0)
-	for i := 2; i < int(n); i++ {
-		syscall.Close(i)
-	}
-
 	prefix := fmt.Sprintf("/var/lib/podkit/container/%d", id)
 
 	// 挂载proc sys tmp dev
-	err = syscall.Mount("proc", fmt.Sprintf("%s/proc", prefix), "proc", 0, "")
+	err := syscall.Mount("proc", fmt.Sprintf("%s/proc", prefix), "proc", 0, "")
 	if err != nil {
 		panic(err)
 	}
@@ -153,8 +151,17 @@ func stage3(id int) {
 		panic(err)
 	}
 
-	os.Stdout.Write([]byte("ok"))
-	syscall.Close(1)
+	// 通知父进程挂载完毕
+	os.Stdout.Write([]byte{1})
+
+	// 现在可以安全关闭所有引用的fd
+	n, err := sysconf.Sysconf(sysconf.SC_OPEN_MAX)
+	if err != nil {
+		panic(err)
+	}
+	for i := 0; i < int(n); i++ {
+		syscall.Close(i)
+	}
 
 	err = syscall.Exec("/bin/podkit_orphan_reaper", nil, nil)
 	if err != nil {

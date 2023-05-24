@@ -7,6 +7,7 @@ import (
 
 type ContainerInfo struct {
 	ContainerID int `json:"container_id"`
+	// ContainerImageName
 }
 
 type RunningInfoStruct struct {

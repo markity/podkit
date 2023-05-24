@@ -5,12 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"os/exec"
 	"podkit/frontend/json_struct"
 	"podkit/frontend/tools"
-	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -109,17 +107,7 @@ var StartCmd = &cobra.Command{
 			}
 		}
 
-		// 解压完毕, 创建sock文件
-		l, err := net.ListenUnix("unix", &net.UnixAddr{Name: fmt.Sprintf("/var/lib/podkit/socket/%d.sock", currentID)})
-		if err != nil {
-			panic(err)
-		}
-		l.SetUnlinkOnClose(false)
-		l.Close()
-
-		time.Sleep(time.Second * 30)
-
-		// 开启shim程序, 等待stage1执行完毕
+		// 开启shim程序, 等待stage1执行完毕, stage1执行完毕后socket文件已经创建且进入监听状态
 		shimCmd := exec.Command("podkit_shim", "stage1", fmt.Sprintf("%d", currentID))
 		shimCmd.Run()
 

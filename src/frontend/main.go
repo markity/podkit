@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"podkit/frontend/cmd/container"
 	"podkit/frontend/cmd/image"
 
 	"github.com/spf13/cobra"
@@ -25,5 +26,6 @@ func main() {
 	// podkit image ls
 	// podkit image start ubuntu22.04
 	RootCmd.AddCommand(image.ImageCmd)
+	RootCmd.AddCommand(container.ContainerCmd)
 	RootCmd.Execute()
 }
