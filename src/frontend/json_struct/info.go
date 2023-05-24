@@ -6,8 +6,8 @@ import (
 )
 
 type ContainerInfo struct {
-	ContainerID int `json:"container_id"`
-	// ContainerImageName
+	ContainerID        int    `json:"container_id"`
+	ContainerImageName string `json:"container_image_name"`
 }
 
 type RunningInfoStruct struct {
@@ -30,9 +30,12 @@ func (ris *RunningInfoStruct) ParseFromFile(filePath string) error {
 	return nil
 }
 
-func (ris *RunningInfoStruct) MarshalToBytes() ([]byte, error) {
+func (ris *RunningInfoStruct) MustMarshalToBytes() []byte {
 	b, err := json.Marshal(ris)
-	return b, err
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 type ImageInfoStruct struct {

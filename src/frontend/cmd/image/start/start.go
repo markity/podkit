@@ -14,11 +14,11 @@ import (
 )
 
 var StartCmd = &cobra.Command{
-	Use:   "start CONTAINER_NAME",
+	Use:   "start IMAGE_NAME",
 	Short: "start a container and print its uuid",
 	Args:  cobra.MatchAll(cobra.ExactArgs(1)),
 	Run: func(cmd *cobra.Command, args []string) {
-		containerName := args[0]
+		imageName := args[0]
 		flock := tools.FlockManager{}
 		err := flock.Init("/var/lib/podkit/lock")
 		if err != nil {
@@ -39,14 +39,14 @@ var StartCmd = &cobra.Command{
 		exists := false
 
 		for k := range imageInfo.ImageTarFilename {
-			if k == containerName {
+			if k == imageName {
 				exists = true
 				break
 			}
 		}
 
 		if !exists {
-			fmt.Printf("%v does not exists\n", containerName)
+			fmt.Printf("%v does not exists\n", imageName)
 			return
 		}
 
@@ -64,7 +64,7 @@ var StartCmd = &cobra.Command{
 		}
 
 		// 解压文件
-		imageFilePath := fmt.Sprintf("/var/lib/podkit/images/%s", imageInfo.ImageTarFilename[containerName])
+		imageFilePath := fmt.Sprintf("/var/lib/podkit/images/%s", imageInfo.ImageTarFilename[imageName])
 		fmt.Printf("Extracting %v\n", imageFilePath)
 		tarFile, err := os.Open(imageFilePath)
 		if err != nil {
@@ -108,20 +108,18 @@ var StartCmd = &cobra.Command{
 		}
 
 		// 开启shim程序, 等待stage1执行完毕, stage1执行完毕后socket文件已经创建且进入监听状态
-		shimCmd := exec.Command("podkit_shim", "stage1", fmt.Sprintf("%d", currentID))
+		shimCmd := exec.Command("podkit_shim", "start", "stage1", fmt.Sprintf("%d", currentID))
 		shimCmd.Run()
 
 		// 更新running_info.json
 		runningInfo.ContainerRunning = append(runningInfo.ContainerRunning, &json_struct.ContainerInfo{
-			ContainerID: currentID,
+			ContainerID:        currentID,
+			ContainerImageName: imageName,
 		})
 
 		runningInfo.ContainerIDCount++
 
-		bs, err := runningInfo.MarshalToBytes()
-		if err != nil {
-			panic(err)
-		}
+		bs := runningInfo.MustMarshalToBytes()
 
 		runningInfoFile, err := os.OpenFile("/var/lib/podkit/running_info.json", os.O_WRONLY|os.O_TRUNC, 0)
 		if err != nil {

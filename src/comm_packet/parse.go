@@ -1,8 +1,16 @@
 package commpacket
 
 import (
+	"encoding/binary"
 	"encoding/json"
 )
+
+func DoPack(lengthIdentify int, data []byte) []byte {
+	bs := make([]byte, lengthIdentify, lengthIdentify+len(data))
+	binary.BigEndian.PutUint32(bs, uint32(len(data)))
+	bs = append(bs, data...)
+	return bs
+}
 
 func ClientParsePacket(data []byte) interface{} {
 	header := MsgHeader{}
