@@ -5,14 +5,17 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"podkit/frontend/tools"
 	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 // stage1: 创建自己的守护进程, 进入stage2, 务必让stage2进入listen之后再结束程序
 // 因此这里用了pipe做通讯
-func startStage1(id int) {
+func startStage1() {
 	pipeReader, pipeWriter := io.Pipe()
-	cmd := exec.Command("podkit_shim", "start", "stage2", fmt.Sprintf("%d", id))
+	cmd := exec.Command("podkit_shim", "start", "stage2", fmt.Sprint(ContainerID))
 	cmd.Stdout = pipeWriter
 	_, err := syscall.Setsid()
 	if err != nil {
@@ -33,15 +36,15 @@ func startStage1(id int) {
 }
 
 // stage2: 需要fork一个子进程作为容器的init进程(podkit_orphan_reaper), 同时监听过来的网络连接, 向容器插入进程
-func startStage2(id int) {
+func startStage2() {
 	syscall.Umask(0)
 
 	// 需要等待stage3完成挂载, 创建设备节点, 创建软链接等工作之后再进入监听状态
 	// 因此这里用了pipe
-	cmd := exec.Command("podkit_shim", "start", "stage3", fmt.Sprintf("%d", id))
+	cmd := exec.Command("podkit_shim", "start", "stage3", fmt.Sprint(ContainerID))
 	pipeReader, pipeWriter := io.Pipe()
 	cmd.Stdout = pipeWriter
-
+	cmd.Env = []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags: syscall.CLONE_NEWIPC | syscall.CLONE_NEWUTS |
 			syscall.CLONE_NEWNS | syscall.CLONE_NEWPID,
@@ -52,7 +55,7 @@ func startStage2(id int) {
 	if err != nil {
 		panic(err)
 	}
-	childPid := cmd.Process.Pid
+	initProcPid := cmd.Process.Pid
 
 	// 等待子进程完成文件挂载等工作
 	bs := make([]byte, 1)
@@ -61,10 +64,12 @@ func startStage2(id int) {
 		panic(err)
 	}
 
+	// 告知主线程目前的监听状态
 	listenFinished := make(chan struct{})
 	listenClosed := make(chan struct{})
-	go RunServer(childPid, id, listenFinished, listenClosed)
+	go RunServer(listenFinished, listenClosed)
 
+	// Server协程开始监听后就能告知父进程, 让stage1退出了, 然后start指令完成
 	<-listenFinished
 	_, err = syscall.Write(1, []byte{1})
 	if err != nil {
@@ -75,7 +80,7 @@ func startStage2(id int) {
 	<-listenClosed
 
 	// 取消挂载
-	prefix := fmt.Sprintf("/var/lib/podkit/container/%d", id)
+	prefix := fmt.Sprintf("/var/lib/podkit/container/%d", ContainerID)
 	err = syscall.Unmount(fmt.Sprintf("%s/dev/pts", prefix), 0)
 	if err != nil {
 		panic(err)
@@ -106,15 +111,15 @@ func startStage2(id int) {
 	}
 
 	// 杀死init进程
-	err = syscall.Kill(childPid, syscall.SIGKILL)
+	err = syscall.Kill(initProcPid, syscall.SIGKILL)
 	if err != nil {
 		panic(err)
 	}
 }
 
 // 挂载文件, exec成为orphan_reaper
-func startStage3(id int) {
-	prefix := fmt.Sprintf("/var/lib/podkit/container/%d", id)
+func startStage3() {
+	prefix := fmt.Sprintf("/var/lib/podkit/container/%d", ContainerID)
 
 	// 挂载proc sys tmp dev
 	err := syscall.Mount("proc", fmt.Sprintf("%s/proc", prefix), "proc", 0, "")
@@ -161,6 +166,36 @@ func startStage3(id int) {
 	if err != nil {
 		panic(err)
 	}
+
+	err = unix.Mknod(fmt.Sprintf("%s/dev/null", prefix), 0666|syscall.S_IFCHR, int(tools.MakeDev(1, 3)))
+	if err != nil {
+		panic(err)
+	}
+	err = unix.Mknod(fmt.Sprintf("%s/dev/full", prefix), 0666|syscall.S_IFCHR, int(tools.MakeDev(1, 7)))
+	if err != nil {
+		panic(err)
+	}
+	err = unix.Mknod(fmt.Sprintf("%s/dev/console", prefix), 0640|syscall.S_IFCHR, int(tools.MakeDev(136, 0)))
+	if err != nil {
+		panic(err)
+	}
+	err = unix.Mknod(fmt.Sprintf("%s/dev/random", prefix), 0666|syscall.S_IFCHR, int(tools.MakeDev(1, 8)))
+	if err != nil {
+		panic(err)
+	}
+	err = unix.Mknod(fmt.Sprintf("%s/dev/urandom", prefix), 0666|syscall.S_IFCHR, int(tools.MakeDev(1, 9)))
+	if err != nil {
+		panic(err)
+	}
+	err = unix.Mknod(fmt.Sprintf("%s/dev/tty", prefix), 0666|syscall.S_IFCHR, int(tools.MakeDev(5, 0)))
+	if err != nil {
+		panic(err)
+	}
+	err = unix.Mknod(fmt.Sprintf("%s/dev/zero", prefix), 0666|syscall.S_IFCHR, int(tools.MakeDev(1, 5)))
+	if err != nil {
+		panic(err)
+	}
+
 	// 通知父进程挂载完毕
 	_, err = os.Stdout.Write([]byte{1})
 	if err != nil {

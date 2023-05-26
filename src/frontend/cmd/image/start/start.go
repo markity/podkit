@@ -1,14 +1,12 @@
 package start
 
 import (
-	"archive/tar"
-	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"podkit/frontend/json_struct"
 	"podkit/frontend/tools"
+	"syscall"
 
 	"github.com/spf13/cobra"
 )
@@ -18,6 +16,8 @@ var StartCmd = &cobra.Command{
 	Short: "start a container and print its uuid",
 	Args:  cobra.MatchAll(cobra.ExactArgs(1)),
 	Run: func(cmd *cobra.Command, args []string) {
+		syscall.Umask(0)
+
 		imageName := args[0]
 		flock := tools.FlockManager{}
 		err := flock.Init("/var/lib/podkit/lock")
@@ -56,9 +56,9 @@ var StartCmd = &cobra.Command{
 			panic(err)
 		}
 
-		currentID := runningInfo.ContainerIDCount
+		currentContainerID := runningInfo.ContainerIDCount
 
-		err = os.Mkdir(fmt.Sprintf("/var/lib/podkit/container/%d", currentID), 0755)
+		err = os.Mkdir(fmt.Sprintf("/var/lib/podkit/container/%d", currentContainerID), 0755)
 		if err != nil {
 			panic(err)
 		}
@@ -66,54 +66,17 @@ var StartCmd = &cobra.Command{
 		// 解压文件
 		imageFilePath := fmt.Sprintf("/var/lib/podkit/images/%s", imageInfo.ImageTarFilename[imageName])
 		fmt.Printf("Extracting %v\n", imageFilePath)
-		tarFile, err := os.Open(imageFilePath)
-		if err != nil {
-			panic(err)
-		}
-		defer tarFile.Close()
-		tarReader := tar.NewReader(tarFile)
-		for {
-			header, err := tarReader.Next()
-			if err == io.EOF {
-				break
-			}
 
-			if err != nil {
-				panic(err)
-			}
-
-			switch header.Typeflag {
-			case tar.TypeDir:
-				err := os.Mkdir(fmt.Sprintf("/var/lib/podkit/container/%d/%s", currentID, header.Name), 0755)
-				if err != nil {
-					panic(err)
-				}
-			case tar.TypeReg:
-			case tar.TypeSymlink:
-			case tar.TypeLink:
-				f, err := os.Create(fmt.Sprintf("/var/lib/podkit/container/%d/%s", currentID, header.Name))
-				if err != nil {
-					panic(err)
-				}
-				defer f.Close()
-
-				_, err = io.Copy(f, tarReader)
-				if err != nil {
-					panic(err)
-				}
-			default:
-				fmt.Println(header.Typeflag)
-				panic(errors.New("cannot recognize image tar file"))
-			}
-		}
+		// TODO: 用golang提供的函数解压
+		exec.Command("tar", "-xvf", imageFilePath, "-C", fmt.Sprintf("/var/lib/podkit/container/%d", currentContainerID)).Run()
 
 		// 开启shim程序, 等待stage1执行完毕, stage1执行完毕后socket文件已经创建且进入监听状态
-		shimCmd := exec.Command("podkit_shim", "start", "stage1", fmt.Sprintf("%d", currentID))
+		shimCmd := exec.Command("podkit_shim", "start", "stage1", fmt.Sprintf("%d", currentContainerID))
 		shimCmd.Run()
 
 		// 更新running_info.json
 		runningInfo.ContainerRunning = append(runningInfo.ContainerRunning, &json_struct.ContainerInfo{
-			ContainerID:        currentID,
+			ContainerID:        currentContainerID,
 			ContainerImageName: imageName,
 		})
 
@@ -132,6 +95,6 @@ var StartCmd = &cobra.Command{
 			panic(err)
 		}
 
-		fmt.Printf("succeed: container id is %d\n", currentID)
+		fmt.Printf("succeed: container id is %d\n", currentContainerID)
 	},
 }

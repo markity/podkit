@@ -1,16 +1,8 @@
 package commpacket
 
 import (
-	"encoding/binary"
 	"encoding/json"
 )
-
-func DoPack(lengthIdentify int, data []byte) []byte {
-	bs := make([]byte, lengthIdentify, lengthIdentify+len(data))
-	binary.BigEndian.PutUint32(bs, uint32(len(data)))
-	bs = append(bs, data...)
-	return bs
-}
 
 func ClientParsePacket(data []byte) interface{} {
 	header := MsgHeader{}
@@ -20,12 +12,28 @@ func ClientParsePacket(data []byte) interface{} {
 	}
 
 	switch header.Type {
-	case TypeServerNotifyContainerClosed:
-		p := ServerNotifyContainerClosed{}
+	case TypeServerNotifyInteractiveExecContainerClosed:
+		p := ServerNotifyInteractiveExecContainerClosed{}
 		json.Unmarshal(data, &p)
 		return &p
 	case TypeServerSendPtyOutput:
 		p := ServerSendPtyOutput{}
+		json.Unmarshal(data, &p)
+		return &p
+	case TypeServerExecBackgroundResp:
+		p := ServerExecBackgroundResp{}
+		json.Unmarshal(data, &p)
+		return &p
+	case TypeServerNotifyContainerClosedSuccesfully:
+		p := ServerNotifyContainerClosedSuccesfully{}
+		json.Unmarshal(data, &p)
+		return &p
+	case TypeServerInteractiveCommandExited:
+		p := ServerInteractiveCommandExited{}
+		json.Unmarshal(data, &p)
+		return &p
+	case TypeServerInteractiveCommandResp:
+		p := ServerInteractiveCommandResp{}
 		json.Unmarshal(data, &p)
 		return &p
 	default:
@@ -41,16 +49,16 @@ func ServerParsePacket(data []byte) interface{} {
 	}
 
 	switch header.Type {
-	case TypeClientCloseContainer:
-		p := ClientCloseContainer{}
+	case TypeClientRequestCloseContainer:
+		p := ClientRequestCloseContainer{}
 		json.Unmarshal(data, &p)
 		return &p
-	case TypeClientExecBackground:
-		p := ClientExecBackground{}
+	case TypeClientRequestExecBackground:
+		p := ClientRequestExecBackground{}
 		json.Unmarshal(data, &p)
 		return &p
-	case TypeClientExecInteractive:
-		p := ClientExecInteractive{}
+	case TypeClientRequestExecInteractive:
+		p := ClientRequestExecInteractive{}
 		json.Unmarshal(data, &p)
 		return &p
 	case TypeClientSendPtyInput:

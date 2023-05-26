@@ -87,7 +87,7 @@ var StopCmd = &cobra.Command{
 		defer conn.Close()
 
 		// 4字节的包大小前缀
-		_, err = conn.Write(commpacket.DoPack(4, (&commpacket.ClientCloseContainer{}).MustMarshalToBytes()))
+		_, err = conn.Write(tools.DoPackWith4Bytes((&commpacket.ClientRequestCloseContainer{}).MustMarshalToBytes()))
 		if err != nil {
 			panic(err)
 		}
@@ -105,7 +105,7 @@ var StopCmd = &cobra.Command{
 		}
 
 		// panic检测, 需要它真正的是ClientCloseContainer
-		_ = commpacket.ClientParsePacket(packetBytes).(*commpacket.ServerNotifyContainerClosed)
+		_ = commpacket.ClientParsePacket(packetBytes).(*commpacket.ServerNotifyContainerClosedSuccesfully)
 
 		newRunning := make([]*json_struct.ContainerInfo, 0)
 		var replacedContainer *json_struct.ContainerInfo
