@@ -15,6 +15,7 @@ const (
 	// 交互式命令的输入输出
 	TypePacketClientSendPtyInput
 	TypePacketServerSendPtyOutput
+	TypePacketClientNotifyWinch
 	// 告知客户端交互式命令正常结束, 在告知客户端已经开启命令后, 会发这个包让客户端结束运行
 	// 但是也能发送ServerNotifyInteractiveExecContainerClosed通知这个容器已经关闭
 	TypePacketServerNotifyExecInteractiveExited
@@ -186,6 +187,22 @@ type PacketServerNotifyExecInteractiveExited struct {
 
 func (p *PacketServerNotifyExecInteractiveExited) MustMarshalToBytes() []byte {
 	p.MsgHeader.Type = TypePacketServerNotifyExecInteractiveExited
+	bs, err := json.Marshal(p)
+	if err != nil {
+		panic(err)
+	}
+
+	return bs
+}
+
+type PacketClientNotifyWinch struct {
+	MsgHeader
+	Rows int `json:"rows"`
+	Cols int `json:"cols"`
+}
+
+func (p *PacketClientNotifyWinch) MustMarshalToBytes() []byte {
+	p.MsgHeader.Type = TypePacketClientNotifyWinch
 	bs, err := json.Marshal(p)
 	if err != nil {
 		panic(err)

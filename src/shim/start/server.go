@@ -16,6 +16,11 @@ import (
 
 	"golang.org/x/sys/unix"
 )
+import (
+	"unsafe"
+
+	"github.com/creack/pty"
+)
 
 type interactiveRunningContext struct {
 	PtyMaster                 *os.File
@@ -292,7 +297,16 @@ func handleInteractiveConn(c net.Conn, ptyMasterFile *os.File, notifyWhenCommand
 		case bs := <-readFromPtyMaster:
 			c.Write(tools.DoPackWith4Bytes((&commpacket.PacketServerSendPtyOutput{Data: string(bs)}).MustMarshalToBytes()))
 		case iface := <-readFromClientChan:
-			ptyMasterFile.Write([]byte(iface.(*commpacket.PacketClientSendPtyInput).Data))
+			switch packet := iface.(type) {
+			case *commpacket.PacketClientSendPtyInput:
+				ptyMasterFile.Write([]byte(iface.(*commpacket.PacketClientSendPtyInput).Data))
+			case *commpacket.PacketClientNotifyWinch:
+				ws := pty.Winsize{Rows: uint16(packet.Rows), Cols: uint16(packet.Cols)}
+				err := tools.Ioctl(ptyMasterFile.Fd(), syscall.TIOCSWINSZ, uintptr(unsafe.Pointer(&ws)))
+				if err != nil {
+					panic(err)
+				}
+			}
 		case err := <-errorChan:
 			panic(err)
 		}

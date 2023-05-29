@@ -67,6 +67,10 @@ func ServerParsePacket(data []byte) interface{} {
 		p := PacketClientSendPtyInput{}
 		json.Unmarshal(data, &p)
 		return &p
+	case TypePacketClientNotifyWinch:
+		p := PacketClientNotifyWinch{}
+		json.Unmarshal(data, &p)
+		return &p
 	default:
 		return nil
 	}

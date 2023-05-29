@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/signal"
 	commpacket "podkit/comm_packet"
 	"podkit/frontend/json_struct"
 	"podkit/frontend/tools"
 	"strconv"
+	"syscall"
 
 	"github.com/creack/pty"
 	"github.com/spf13/cobra"
@@ -161,6 +163,9 @@ var ExecCmd = &cobra.Command{
 				}
 			}()
 
+			signalWinch := make(chan os.Signal, 1)
+			signal.Notify(signalWinch, syscall.SIGWINCH)
+
 			for {
 				select {
 				case iface := <-readFromConn:
@@ -182,6 +187,15 @@ var ExecCmd = &cobra.Command{
 					}
 				case stdinBs := <-readFromStdin:
 					_, err := conn.Write(tools.DoPackWith4Bytes((&commpacket.PacketClientSendPtyInput{Data: string(stdinBs)}).MustMarshalToBytes()))
+					if err != nil {
+						panic(err)
+					}
+				case <-signalWinch:
+					rows, cols, err := pty.Getsize(os.Stdin)
+					if err != nil {
+						panic(err)
+					}
+					_, err = conn.Write(tools.DoPackWith4Bytes((&commpacket.PacketClientNotifyWinch{Rows: rows, Cols: cols}).MustMarshalToBytes()))
 					if err != nil {
 						panic(err)
 					}
