@@ -9,11 +9,9 @@ import (
 	"os/exec"
 	commpacket "podkit/comm_packet"
 	"podkit/frontend/tools"
+	"runtime"
 	"sync"
 	"syscall"
-)
-import (
-	"runtime"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -29,6 +27,8 @@ type interactiveRunningContext struct {
 }
 
 func RunServer(sendWhenListenFinished chan struct{}, sendWhenListenClosed chan struct{}) {
+	runtime.LockOSThread()
+
 	// 下面监听网络连接, 操作容器
 	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: fmt.Sprintf("/var/lib/podkit/socket/%d.sock", ContainerID), Net: "unix"})
 	if err != nil {
@@ -69,6 +69,7 @@ func RunServer(sendWhenListenFinished chan struct{}, sendWhenListenClosed chan s
 					ctx.NotifyWhenCommandExited <- struct{}{}
 					ctx.PtySlave.Close()
 					ctx.PtyMaster.Close()
+					<-ctx.ConnClosedNotify
 					delete(interactiveContext, wpid)
 				}
 
@@ -76,6 +77,9 @@ func RunServer(sendWhenListenFinished chan struct{}, sendWhenListenClosed chan s
 					for k, v := range interactiveContext {
 						syscall.Kill(k, syscall.SIGKILL)
 						v.NotifyWhenContainerClosed <- struct{}{}
+						<-v.ConnClosedNotify
+						v.PtySlave.Close()
+						v.PtyMaster.Close()
 					}
 					mu.Unlock()
 
@@ -91,6 +95,9 @@ func RunServer(sendWhenListenFinished chan struct{}, sendWhenListenClosed chan s
 					for k, v := range interactiveContext {
 						syscall.Kill(k, syscall.SIGKILL)
 						v.NotifyWhenContainerClosed <- struct{}{}
+						<-v.ConnClosedNotify
+						v.PtySlave.Close()
+						v.PtyMaster.Close()
 					}
 					mu.Unlock()
 
@@ -119,11 +126,6 @@ func RunServer(sendWhenListenFinished chan struct{}, sendWhenListenClosed chan s
 			closing = true
 			mu.Unlock()
 			<-connClosedNotifySentNotify
-			for _, v := range interactiveContext {
-				<-v.ConnClosedNotify
-				v.PtyMaster.Close()
-				v.PtySlave.Close()
-			}
 			_, err := c.Write(tools.DoPackWith4Bytes((&commpacket.PacketServerContainerClosedOK{}).MustMarshalToBytes()))
 			if err != nil {
 				panic(err)
@@ -175,15 +177,16 @@ func RunServer(sendWhenListenFinished chan struct{}, sendWhenListenClosed chan s
 				panic(err)
 			}
 
-			runtime.LockOSThread()
 			pidNS, err := syscall.Open(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/pid", ContainerID), os.O_RDONLY, 0)
 			if err != nil {
 				panic(err)
 			}
 
-			err = unix.Setns(pidNS, 0)
-			if err != nil {
-				panic(err)
+			for i := 0; i < 100; i++ {
+				err = unix.Setns(pidNS, 0)
+				if err != nil {
+					panic(err)
+				}
 			}
 
 			pipeReader, pipeWriter := io.Pipe()
@@ -195,7 +198,6 @@ func RunServer(sendWhenListenFinished chan struct{}, sendWhenListenClosed chan s
 			if err != nil {
 				panic(err)
 			}
-			runtime.UnlockOSThread()
 
 			newProcPid := cmd.Process.Pid
 
