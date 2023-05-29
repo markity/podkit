@@ -31,7 +31,7 @@ type interactiveRunningContext struct {
 	ConnClosedNotify chan struct{}
 }
 
-func RunServer(sendWhenListenFinished chan struct{}, sendWhenListenClosed chan struct{}) {
+func RunServer(initProcPid int, sendWhenListenFinished chan struct{}, sendWhenListenClosed chan struct{}) {
 	runtime.LockOSThread()
 
 	// 下面监听网络连接, 操作容器
@@ -131,9 +131,48 @@ func RunServer(sendWhenListenFinished chan struct{}, sendWhenListenClosed chan s
 			closing = true
 			mu.Unlock()
 			<-connClosedNotifySentNotify
+			syscall.Kill(initProcPid, syscall.SIGKILL)
+			// 取消挂载
+			prefix := fmt.Sprintf("/var/lib/podkit/container/%d", ContainerID)
+		p1:
+			err = syscall.Unmount(fmt.Sprintf("%s/dev/pts", prefix), 0)
+			if err != nil {
+				goto p1
+			}
+		p2:
+			err = syscall.Unmount(fmt.Sprintf("%s/dev/mqueue", prefix), 0)
+			if err != nil {
+				goto p2
+			}
+		p3:
+			err = syscall.Unmount(fmt.Sprintf("%s/dev/shm", prefix), 0)
+			if err != nil {
+				goto p3
+			}
+		p4:
+			err = syscall.Unmount(fmt.Sprintf("%s/dev", prefix), 0)
+			if err != nil {
+				goto p4
+			}
+		p5:
+			err = syscall.Unmount(fmt.Sprintf("%s/tmp", prefix), 0)
+			if err != nil {
+				goto p5
+			}
+		p6:
+			err = syscall.Unmount(fmt.Sprintf("%s/sys", prefix), 0)
+			if err != nil {
+				goto p6
+			}
+		p7:
+			err = syscall.Unmount(fmt.Sprintf("%s/proc", prefix), 0)
+			if err != nil {
+				goto p7
+			}
+		p8:
 			_, err := c.Write(tools.DoPackWith4Bytes((&commpacket.PacketServerContainerClosedOK{}).MustMarshalToBytes()))
 			if err != nil {
-				panic(err)
+				goto p8
 			}
 			goto out
 		case *commpacket.PacketClientExecBackgroundRequest:

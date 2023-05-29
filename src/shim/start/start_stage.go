@@ -67,7 +67,7 @@ func startStage2() {
 	// 告知主线程目前的监听状态
 	listenFinished := make(chan struct{})
 	listenClosed := make(chan struct{})
-	go RunServer(listenFinished, listenClosed)
+	go RunServer(initProcPid, listenFinished, listenClosed)
 
 	// Server协程开始监听后就能告知父进程, 让stage1退出了, 然后start指令完成
 	<-listenFinished
@@ -79,42 +79,6 @@ func startStage2() {
 	// 等待listener退出
 	<-listenClosed
 
-	// 取消挂载
-	prefix := fmt.Sprintf("/var/lib/podkit/container/%d", ContainerID)
-	err = syscall.Unmount(fmt.Sprintf("%s/dev/pts", prefix), 0)
-	if err != nil {
-		panic(err)
-	}
-	err = syscall.Unmount(fmt.Sprintf("%s/dev/mqueue", prefix), 0)
-	if err != nil {
-		panic(err)
-	}
-	err = syscall.Unmount(fmt.Sprintf("%s/dev/shm", prefix), 0)
-	if err != nil {
-		panic(err)
-	}
-	err = syscall.Unmount(fmt.Sprintf("%s/dev", prefix), 0)
-	if err != nil {
-		panic(err)
-	}
-	err = syscall.Unmount(fmt.Sprintf("%s/tmp", prefix), 0)
-	if err != nil {
-		panic(err)
-	}
-	err = syscall.Unmount(fmt.Sprintf("%s/sys", prefix), 0)
-	if err != nil {
-		panic(err)
-	}
-	err = syscall.Unmount(fmt.Sprintf("%s/proc", prefix), 0)
-	if err != nil {
-		panic(err)
-	}
-
-	// 杀死init进程
-	err = syscall.Kill(initProcPid, syscall.SIGKILL)
-	if err != nil {
-		panic(err)
-	}
 }
 
 // 挂载文件, exec成为orphan_reaper
