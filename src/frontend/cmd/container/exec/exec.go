@@ -1,10 +1,8 @@
 package exec
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	commpacket "podkit/comm_packet"
@@ -137,15 +135,7 @@ var ExecCmd = &cobra.Command{
 			readFromConn := make(chan interface{})
 			go func() {
 				for {
-					lengthBytes := make([]byte, 4)
-					_, err := io.ReadFull(conn, lengthBytes)
-					if err != nil {
-						<-readFromConn
-						return
-					}
-
-					packetBytes := make([]byte, binary.BigEndian.Uint32(lengthBytes))
-					_, err = io.ReadFull(conn, packetBytes)
+					packetBytes, err := tools.ReadPacketWith4BytesLengthHeader(conn)
 					if err != nil {
 						errorsChannel <- err
 						return
@@ -167,9 +157,7 @@ var ExecCmd = &cobra.Command{
 						return
 					}
 
-					newBs := make([]byte, n)
-					copy(newBs, bs)
-					readFromStdin <- newBs
+					readFromStdin <- bs[:n]
 				}
 			}()
 
@@ -212,19 +200,13 @@ var ExecCmd = &cobra.Command{
 				panic(err)
 			}
 
-			packet := commpacket.ClientParsePacket(packetBytes)
-			switch resp := packet.(type) {
-			case *commpacket.PacketServerExecBackgroundResponse:
-				if resp.CommandExists {
-					fmt.Println("ok, command now is running")
-				} else {
-					fmt.Println("failed, command not found")
-				}
-				flock.Release()
-				return
-			default:
-				panic(errors.New("unexpected error"))
+			packet := (commpacket.ClientParsePacket(packetBytes)).(*commpacket.PacketServerExecBackgroundResponse)
+			if packet.CommandExists {
+				fmt.Println("ok, command now is running")
+			} else {
+				fmt.Println("failed, command not found")
 			}
+			flock.Release()
 		}
 	},
 }

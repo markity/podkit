@@ -2,8 +2,6 @@ package main
 
 import (
 	"C"
-	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -21,6 +19,15 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+type interactiveRunningContext struct {
+	PtyMaster                 *os.File
+	PtySlave                  *os.File
+	NotifyWhenContainerClosed chan struct{}
+	NotifyWhenCommandExited   chan struct{}
+
+	ConnClosedNotify chan struct{}
+}
+
 func RunServer(sendWhenListenFinished chan struct{}, sendWhenListenClosed chan struct{}) {
 	// 下面监听网络连接, 操作容器
 	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: fmt.Sprintf("/var/lib/podkit/socket/%d.sock", ContainerID), Net: "unix"})
@@ -35,16 +42,10 @@ func RunServer(sendWhenListenFinished chan struct{}, sendWhenListenClosed chan s
 
 	// 标志位, 使程序进入"正在关闭"的状态
 	closing := false
-	// 当其它进程全部关闭后, 告知正在执行关闭的连接
-	connClosedNotify := make(map[int]chan struct{})
-	// 告知正在interactive的goroutine程序结束或者container终止
-	interactiveNotifyExitedMap := make(map[int]chan struct{})
-	interactiveNotifyContainerClosedMap := make(map[int]chan struct{})
-	// 需要关闭pty设备
-	ptyMasterFileMap := make(map[int]*os.File)
-	ptySlaveFileMap := make(map[int]*os.File)
-	connClosedNotifySentNotify := make(chan struct{}, 1)
+	interactiveContext := make(map[int]*interactiveRunningContext)
 	mu := sync.Mutex{} // 保护上面的一切数据
+
+	connClosedNotifySentNotify := make(chan struct{})
 
 	// 开启shim-reaper, 负责收割所有执行完毕的侵入容器的子进程
 	go func() {
@@ -64,20 +65,17 @@ func RunServer(sendWhenListenFinished chan struct{}, sendWhenListenClosed chan s
 			select {
 			case wpid := <-waitPIDChan:
 				mu.Lock()
-				if c, ok := interactiveNotifyExitedMap[wpid]; ok {
-					c <- struct{}{}
-					delete(interactiveNotifyExitedMap, wpid)
-					delete(interactiveNotifyContainerClosedMap, wpid)
-					ptySlaveFileMap[wpid].Close()
-					ptyMasterFileMap[wpid].Close()
-					delete(ptyMasterFileMap, wpid)
-					delete(ptySlaveFileMap, wpid)
+				if ctx, ok := interactiveContext[wpid]; ok {
+					ctx.NotifyWhenCommandExited <- struct{}{}
+					ctx.PtySlave.Close()
+					ctx.PtyMaster.Close()
+					delete(interactiveContext, wpid)
 				}
 
 				if closing {
-					for k, v := range interactiveNotifyContainerClosedMap {
+					for k, v := range interactiveContext {
 						syscall.Kill(k, syscall.SIGKILL)
-						v <- struct{}{}
+						v.NotifyWhenContainerClosed <- struct{}{}
 					}
 					mu.Unlock()
 
@@ -90,9 +88,9 @@ func RunServer(sendWhenListenFinished chan struct{}, sendWhenListenClosed chan s
 				mu.Lock()
 
 				if closing {
-					for k, v := range interactiveNotifyContainerClosedMap {
+					for k, v := range interactiveContext {
 						syscall.Kill(k, syscall.SIGKILL)
-						v <- struct{}{}
+						v.NotifyWhenContainerClosed <- struct{}{}
 					}
 					mu.Unlock()
 
@@ -101,7 +99,6 @@ func RunServer(sendWhenListenFinished chan struct{}, sendWhenListenClosed chan s
 				}
 				mu.Unlock()
 			}
-
 		}
 	}()
 
@@ -122,9 +119,10 @@ func RunServer(sendWhenListenFinished chan struct{}, sendWhenListenClosed chan s
 			closing = true
 			mu.Unlock()
 			<-connClosedNotifySentNotify
-			for k, v := range connClosedNotify {
-				<-v
-				ptyMasterFileMap[k].Close()
+			for _, v := range interactiveContext {
+				<-v.ConnClosedNotify
+				v.PtyMaster.Close()
+				v.PtySlave.Close()
 			}
 			_, err := c.Write(tools.DoPackWith4Bytes((&commpacket.PacketServerContainerClosedOK{}).MustMarshalToBytes()))
 			if err != nil {
@@ -225,15 +223,14 @@ func RunServer(sendWhenListenFinished chan struct{}, sendWhenListenClosed chan s
 			notifyWhenContainerClosed := make(chan struct{}, 1)
 			mu.Lock()
 			// 这个管道里面包含了巨多东西, 都要读完才能证明所有interactive协程都退出了
-			connClosedNotify[newProcPid] = notifyWhenConnClosed
+			interactiveContext[newProcPid] = &interactiveRunningContext{
+				PtyMaster:                 ptyMasterFile,
+				PtySlave:                  ptySlaveFile,
+				NotifyWhenContainerClosed: notifyWhenContainerClosed,
+				NotifyWhenCommandExited:   notifyWhenCommandExited,
+				ConnClosedNotify:          notifyWhenConnClosed,
+			}
 
-			// 这两个管道是用来通知子进程是否结束或者容器关闭的, 让这协程通知用户后退出
-			interactiveNotifyExitedMap[newProcPid] = notifyWhenCommandExited
-			interactiveNotifyContainerClosedMap[newProcPid] = notifyWhenContainerClosed
-
-			// 保存PtyMasterFile, 要及时关闭设备
-			ptyMasterFileMap[newProcPid] = ptyMasterFile
-			ptySlaveFileMap[newProcPid] = ptySlaveFile
 			mu.Unlock()
 
 			go handleInteractiveConn(c, ptyMasterFile, notifyWhenCommandExited, notifyWhenContainerClosed, notifyWhenConnClosed)
@@ -249,21 +246,17 @@ out:
 func handleInteractiveConn(c net.Conn, ptyMasterFile *os.File, notifyWhenCommandExited chan struct{}, notifyWhenContainerClosed chan struct{}, notifyWhenConnClosed chan struct{}) {
 	readFromClientChan := make(chan interface{})
 	readFromPtyMaster := make(chan []byte)
+	errorChan := make(chan error, 2)
 
 	// conn reader
 	go func() {
 		for {
-			lengthBytes := make([]byte, 4)
-			_, err := io.ReadFull(c, lengthBytes)
+			packetBytes, err := tools.ReadPacketWith4BytesLengthHeader(c)
 			if err != nil {
+				errorChan <- err
 				return
 			}
 
-			packetBytes := make([]byte, binary.BigEndian.Uint32(lengthBytes))
-			_, err = io.ReadFull(c, packetBytes)
-			if err != nil {
-				panic(err)
-			}
 			readFromClientChan <- commpacket.ServerParsePacket(packetBytes)
 		}
 	}()
@@ -274,6 +267,7 @@ func handleInteractiveConn(c net.Conn, ptyMasterFile *os.File, notifyWhenCommand
 			bs := make([]byte, 512)
 			n, err := ptyMasterFile.Read(bs)
 			if err != nil {
+				errorChan <- err
 				return
 			}
 
@@ -284,33 +278,21 @@ func handleInteractiveConn(c net.Conn, ptyMasterFile *os.File, notifyWhenCommand
 	for {
 		select {
 		case <-notifyWhenCommandExited:
-			_, err := c.Write(tools.DoPackWith4Bytes((&commpacket.PacketServerNotifyExecInteractiveExited{}).MustMarshalToBytes()))
-			if err != nil {
-				panic(err)
-			}
+			c.Write(tools.DoPackWith4Bytes((&commpacket.PacketServerNotifyExecInteractiveExited{}).MustMarshalToBytes()))
 			c.Close()
 			notifyWhenConnClosed <- struct{}{}
 			return
 		case <-notifyWhenContainerClosed:
-			_, err := c.Write(tools.DoPackWith4Bytes((&commpacket.PacketServerNotifyExecInteractiveContainerClosed{}).MustMarshalToBytes()))
-			if err != nil {
-				panic(err)
-			}
+			c.Write(tools.DoPackWith4Bytes((&commpacket.PacketServerNotifyExecInteractiveContainerClosed{}).MustMarshalToBytes()))
 			c.Close()
 			notifyWhenConnClosed <- struct{}{}
 			return
 		case bs := <-readFromPtyMaster:
-			_, err := c.Write(tools.DoPackWith4Bytes((&commpacket.PacketServerSendPtyOutput{Data: string(bs)}).MustMarshalToBytes()))
-			if err != nil {
-				panic(err)
-			}
+			c.Write(tools.DoPackWith4Bytes((&commpacket.PacketServerSendPtyOutput{Data: string(bs)}).MustMarshalToBytes()))
 		case iface := <-readFromClientChan:
-			switch i := iface.(type) {
-			case *commpacket.PacketClientSendPtyInput:
-				ptyMasterFile.Write([]byte(i.Data))
-			default:
-				panic(errors.New("unexpected error"))
-			}
+			ptyMasterFile.Write([]byte(iface.(*commpacket.PacketClientSendPtyInput).Data))
+		case err := <-errorChan:
+			panic(err)
 		}
 	}
 }
