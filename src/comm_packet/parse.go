@@ -12,28 +12,29 @@ func ClientParsePacket(data []byte) interface{} {
 	}
 
 	switch header.Type {
-	case TypeServerNotifyInteractiveExecContainerClosed:
-		p := ServerNotifyInteractiveExecContainerClosed{}
+	case TypePacketServerNotifyExecInteractiveContainerClosed:
+		p := PacketServerNotifyExecInteractiveContainerClosed{}
 		json.Unmarshal(data, &p)
 		return &p
-	case TypeServerSendPtyOutput:
-		p := ServerSendPtyOutput{}
+	case TypePacketServerSendPtyOutput:
+		p := PacketServerSendPtyOutput{}
 		json.Unmarshal(data, &p)
 		return &p
-	case TypeServerExecBackgroundResp:
-		p := ServerExecBackgroundResp{}
+	case TypePacketServerExecBackgroundResponse:
+		p := PacketServerExecBackgroundResponse{}
 		json.Unmarshal(data, &p)
 		return &p
-	case TypeServerNotifyContainerClosedSuccesfully:
-		p := ServerNotifyContainerClosedSuccesfully{}
+	case TypePacketServerContainerClosedOK:
+		p := PacketServerContainerClosedOK{}
 		json.Unmarshal(data, &p)
 		return &p
-	case TypeServerInteractiveCommandExited:
-		p := ServerInteractiveCommandExited{}
+	case TypePacketServerNotifyExecInteractiveExited:
+		p := PacketServerNotifyExecInteractiveExited{}
 		json.Unmarshal(data, &p)
 		return &p
-	case TypeServerInteractiveCommandResp:
-		p := ServerInteractiveCommandResp{}
+		// 共6个
+	case TypePacketServerExecInteractiveResponse:
+		p := PacketServerExecInteractiveResponse{}
 		json.Unmarshal(data, &p)
 		return &p
 	default:
@@ -49,20 +50,21 @@ func ServerParsePacket(data []byte) interface{} {
 	}
 
 	switch header.Type {
-	case TypeClientRequestCloseContainer:
-		p := ClientRequestCloseContainer{}
+	case TypePacketClientCloseContainerRequest:
+		p := PacketClientCloseContainerRequest{}
 		json.Unmarshal(data, &p)
 		return &p
-	case TypeClientRequestExecBackground:
-		p := ClientRequestExecBackground{}
+	case TypePacketClientExecBackgroundRequest:
+		p := PacketClientExecBackgroundRequest{}
 		json.Unmarshal(data, &p)
 		return &p
-	case TypeClientRequestExecInteractive:
-		p := ClientRequestExecInteractive{}
+	case TypePacketClientExecInteractiveRequest:
+		p := PacketClientExecInteractiveRequest{}
 		json.Unmarshal(data, &p)
 		return &p
-	case TypeClientSendPtyInput:
-		p := ClientSendPtyInput{}
+		// 共4个
+	case TypePacketClientSendPtyInput:
+		p := PacketClientSendPtyInput{}
 		json.Unmarshal(data, &p)
 		return &p
 	default:

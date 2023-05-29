@@ -9,27 +9,27 @@ type MsgType int
 const (
 	// 客户端连接上后的请求
 	// 请求开启交互式命令
-	TypeClientRequestExecInteractive MsgType = iota
+	TypePacketClientExecInteractiveRequest MsgType = iota
 	// 告知客户端交互式命令已经开启或找不到这个命令
-	TypeServerInteractiveCommandResp
+	TypePacketServerExecInteractiveResponse
 	// 交互式命令的输入输出
-	TypeClientSendPtyInput
-	TypeServerSendPtyOutput
+	TypePacketClientSendPtyInput
+	TypePacketServerSendPtyOutput
 	// 告知客户端交互式命令正常结束, 在告知客户端已经开启命令后, 会发这个包让客户端结束运行
 	// 但是也能发送ServerNotifyInteractiveExecContainerClosed通知这个容器已经关闭
-	TypeServerInteractiveCommandExited
+	TypePacketServerNotifyExecInteractiveExited
 	// 通知正在进行交互式命令的客户端容器已经被关闭了
-	TypeServerNotifyInteractiveExecContainerClosed
+	TypePacketServerNotifyExecInteractiveContainerClosed
 
 	// 请求开启守护进程命令
-	TypeClientRequestExecBackground
+	TypePacketClientExecBackgroundRequest
 	// 告知客户端守护进程命令已经开启或者已经结束, 守护进程的stdin/out/err都是null设备
-	TypeServerExecBackgroundResp
+	TypePacketServerExecBackgroundResponse
 
 	// 请求关闭容器
-	TypeClientRequestCloseContainer
+	TypePacketClientCloseContainerRequest
 	// 通知连接已经成功关闭
-	TypeServerNotifyContainerClosedSuccesfully
+	TypePacketServerContainerClosedOK
 )
 
 // 标识包的类型
@@ -38,15 +38,15 @@ type MsgHeader struct {
 }
 
 // 请求1, 客户端请求交互式执行
-type ClientRequestExecInteractive struct {
+type PacketClientExecInteractiveRequest struct {
 	MsgHeader
 	Command string `json:"cmd"`
 	Rows    int    `json:"rows"`
 	Cols    int    `json:"cols"`
 }
 
-func (p *ClientRequestExecInteractive) MustMarshalToBytes() []byte {
-	p.MsgHeader.Type = TypeClientRequestExecInteractive
+func (p *PacketClientExecInteractiveRequest) MustMarshalToBytes() []byte {
+	p.MsgHeader.Type = TypePacketClientExecInteractiveRequest
 	bs, err := json.Marshal(p)
 	if err != nil {
 		panic(err)
@@ -56,13 +56,13 @@ func (p *ClientRequestExecInteractive) MustMarshalToBytes() []byte {
 }
 
 // 用来做持续的交互
-type ClientSendPtyInput struct {
+type PacketClientSendPtyInput struct {
 	MsgHeader
 	Data string
 }
 
-func (p *ClientSendPtyInput) MustMarshalToBytes() []byte {
-	p.MsgHeader.Type = TypeClientSendPtyInput
+func (p *PacketClientSendPtyInput) MustMarshalToBytes() []byte {
+	p.MsgHeader.Type = TypePacketClientSendPtyInput
 	bs, err := json.Marshal(p)
 	if err != nil {
 		panic(err)
@@ -72,13 +72,13 @@ func (p *ClientSendPtyInput) MustMarshalToBytes() []byte {
 }
 
 // 用来做持续的交互
-type ServerSendPtyOutput struct {
+type PacketServerSendPtyOutput struct {
 	MsgHeader
 	Data string
 }
 
-func (p *ServerSendPtyOutput) MustMarshalToBytes() []byte {
-	p.MsgHeader.Type = TypeServerSendPtyOutput
+func (p *PacketServerSendPtyOutput) MustMarshalToBytes() []byte {
+	p.MsgHeader.Type = TypePacketServerSendPtyOutput
 	bs, err := json.Marshal(p)
 	if err != nil {
 		panic(err)
@@ -88,13 +88,13 @@ func (p *ServerSendPtyOutput) MustMarshalToBytes() []byte {
 }
 
 // 请求2, 客户端发来的消息是用来exec -d
-type ClientRequestExecBackground struct {
+type PacketClientExecBackgroundRequest struct {
 	MsgHeader
 	Command string `json:"cmd"`
 }
 
-func (p *ClientRequestExecBackground) MustMarshalToBytes() []byte {
-	p.MsgHeader.Type = TypeClientRequestExecBackground
+func (p *PacketClientExecBackgroundRequest) MustMarshalToBytes() []byte {
+	p.MsgHeader.Type = TypePacketClientExecBackgroundRequest
 	bs, err := json.Marshal(p)
 	if err != nil {
 		panic(err)
@@ -104,13 +104,13 @@ func (p *ClientRequestExecBackground) MustMarshalToBytes() []byte {
 }
 
 // 请求2, 客户端发来的消息是用来exec -d
-type ServerExecBackgroundResp struct {
+type PacketServerExecBackgroundResponse struct {
 	MsgHeader
 	CommandExists bool `json:"command_exists"`
 }
 
-func (p *ServerExecBackgroundResp) MustMarshalToBytes() []byte {
-	p.MsgHeader.Type = TypeServerExecBackgroundResp
+func (p *PacketServerExecBackgroundResponse) MustMarshalToBytes() []byte {
+	p.MsgHeader.Type = TypePacketServerExecBackgroundResponse
 	bs, err := json.Marshal(p)
 	if err != nil {
 		panic(err)
@@ -120,12 +120,12 @@ func (p *ServerExecBackgroundResp) MustMarshalToBytes() []byte {
 }
 
 // 请求3, 客户端要求关闭容器
-type ClientRequestCloseContainer struct {
+type PacketClientCloseContainerRequest struct {
 	MsgHeader
 }
 
-func (p *ClientRequestCloseContainer) MustMarshalToBytes() []byte {
-	p.MsgHeader.Type = TypeClientRequestCloseContainer
+func (p *PacketClientCloseContainerRequest) MustMarshalToBytes() []byte {
+	p.MsgHeader.Type = TypePacketClientCloseContainerRequest
 	bs, err := json.Marshal(p)
 	if err != nil {
 		panic(err)
@@ -135,12 +135,12 @@ func (p *ClientRequestCloseContainer) MustMarshalToBytes() []byte {
 }
 
 // 告知用户容器已经关闭
-type ServerNotifyInteractiveExecContainerClosed struct {
+type PacketServerNotifyExecInteractiveContainerClosed struct {
 	MsgHeader
 }
 
-func (p *ServerNotifyInteractiveExecContainerClosed) MustMarshalToBytes() []byte {
-	p.MsgHeader.Type = TypeServerNotifyInteractiveExecContainerClosed
+func (p *PacketServerNotifyExecInteractiveContainerClosed) MustMarshalToBytes() []byte {
+	p.MsgHeader.Type = TypePacketServerNotifyExecInteractiveContainerClosed
 	bs, err := json.Marshal(p)
 	if err != nil {
 		panic(err)
@@ -150,12 +150,12 @@ func (p *ServerNotifyInteractiveExecContainerClosed) MustMarshalToBytes() []byte
 }
 
 // 告知用户容器已经关闭
-type ServerNotifyContainerClosedSuccesfully struct {
+type PacketServerContainerClosedOK struct {
 	MsgHeader
 }
 
-func (p *ServerNotifyContainerClosedSuccesfully) MustMarshalToBytes() []byte {
-	p.MsgHeader.Type = TypeServerNotifyContainerClosedSuccesfully
+func (p *PacketServerContainerClosedOK) MustMarshalToBytes() []byte {
+	p.MsgHeader.Type = TypePacketServerContainerClosedOK
 	bs, err := json.Marshal(p)
 	if err != nil {
 		panic(err)
@@ -164,13 +164,13 @@ func (p *ServerNotifyContainerClosedSuccesfully) MustMarshalToBytes() []byte {
 	return bs
 }
 
-type ServerInteractiveCommandResp struct {
+type PacketServerExecInteractiveResponse struct {
 	MsgHeader
 	CommandExists bool `json:"command_exists"`
 }
 
-func (p *ServerInteractiveCommandResp) MustMarshalToBytes() []byte {
-	p.MsgHeader.Type = TypeServerInteractiveCommandResp
+func (p *PacketServerExecInteractiveResponse) MustMarshalToBytes() []byte {
+	p.MsgHeader.Type = TypePacketServerExecInteractiveResponse
 	bs, err := json.Marshal(p)
 	if err != nil {
 		panic(err)
@@ -179,13 +179,13 @@ func (p *ServerInteractiveCommandResp) MustMarshalToBytes() []byte {
 	return bs
 }
 
-type ServerInteractiveCommandExited struct {
+type PacketServerNotifyExecInteractiveExited struct {
 	MsgHeader
 	CommandExists bool `json:"command_exists"`
 }
 
-func (p *ServerInteractiveCommandExited) MustMarshalToBytes() []byte {
-	p.MsgHeader.Type = TypeServerInteractiveCommandExited
+func (p *PacketServerNotifyExecInteractiveExited) MustMarshalToBytes() []byte {
+	p.MsgHeader.Type = TypePacketServerNotifyExecInteractiveExited
 	bs, err := json.Marshal(p)
 	if err != nil {
 		panic(err)

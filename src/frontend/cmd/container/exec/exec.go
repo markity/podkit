@@ -84,11 +84,13 @@ var ExecCmd = &cobra.Command{
 
 		if !exists {
 			fmt.Printf("container %d does not exists\n", id)
+			flock.Release()
 			return
 		}
 
 		if !running {
 			fmt.Printf("container %d stopped, start it first\n", id)
+			flock.Release()
 			return
 		}
 
@@ -104,7 +106,7 @@ var ExecCmd = &cobra.Command{
 				panic(err)
 			}
 
-			_, err = conn.Write(tools.DoPackWith4Bytes((&commpacket.ClientRequestExecInteractive{Rows: rows, Cols: cols, Command: execCmd}).MustMarshalToBytes()))
+			_, err = conn.Write(tools.DoPackWith4Bytes((&commpacket.PacketClientExecInteractiveRequest{Rows: rows, Cols: cols, Command: execCmd}).MustMarshalToBytes()))
 			if err != nil {
 				panic(err)
 			}
@@ -115,12 +117,13 @@ var ExecCmd = &cobra.Command{
 				panic(err)
 			}
 
-			if !commpacket.ClientParsePacket(packetBytes).(*commpacket.ServerInteractiveCommandResp).CommandExists {
+			if !commpacket.ClientParsePacket(packetBytes).(*commpacket.PacketServerExecInteractiveResponse).CommandExists {
 				fmt.Println("command does not exists, check it again")
 				flock.Release()
 				return
 			}
 
+			fmt.Println("呼呼")
 			// 此处要释放文件锁, 让其它podkit程序得以运行
 			flock.Release()
 
@@ -175,21 +178,23 @@ var ExecCmd = &cobra.Command{
 				select {
 				case iface := <-readFromConn:
 					switch packet := iface.(type) {
-					case *commpacket.ServerNotifyInteractiveExecContainerClosed:
+					case *commpacket.PacketServerNotifyExecInteractiveContainerClosed:
 						term.Restore(int(os.Stdin.Fd()), oldState)
 						conn.Close()
 						fmt.Println("container is closed")
+						flock.Release()
 						return
-					case *commpacket.ServerInteractiveCommandExited:
+					case *commpacket.PacketServerNotifyExecInteractiveExited:
 						term.Restore(int(os.Stdin.Fd()), oldState)
 						conn.Close()
 						fmt.Println("command exited")
+						flock.Release()
 						return
-					case *commpacket.ServerSendPtyOutput:
+					case *commpacket.PacketServerSendPtyOutput:
 						os.Stdout.Write([]byte(packet.Data))
 					}
 				case stdinBs := <-readFromStdin:
-					_, err := conn.Write(tools.DoPackWith4Bytes((&commpacket.ClientSendPtyInput{Data: string(stdinBs)}).MustMarshalToBytes()))
+					_, err := conn.Write(tools.DoPackWith4Bytes((&commpacket.PacketClientSendPtyInput{Data: string(stdinBs)}).MustMarshalToBytes()))
 					if err != nil {
 						panic(err)
 					}
@@ -198,7 +203,7 @@ var ExecCmd = &cobra.Command{
 				}
 			}
 		} else {
-			_, err := conn.Write((tools.DoPackWith4Bytes((&commpacket.ClientRequestExecBackground{Command: execCmd}).MustMarshalToBytes())))
+			_, err := conn.Write((tools.DoPackWith4Bytes((&commpacket.PacketClientExecBackgroundRequest{Command: execCmd}).MustMarshalToBytes())))
 			if err != nil {
 				panic(err)
 			}
@@ -210,7 +215,7 @@ var ExecCmd = &cobra.Command{
 
 			packet := commpacket.ClientParsePacket(packetBytes)
 			switch resp := packet.(type) {
-			case *commpacket.ServerExecBackgroundResp:
+			case *commpacket.PacketServerExecBackgroundResponse:
 				if resp.CommandExists {
 					fmt.Println("ok, command now is running")
 				} else {

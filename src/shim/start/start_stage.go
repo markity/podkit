@@ -210,7 +210,7 @@ func startStage3() {
 	// 	panic(err)
 	// }
 
-	err = syscall.Exec("/bin/podkit_orphan_reaper", nil, nil)
+	err = syscall.Exec("/bin/podkit_orphan_reaper", []string{"init"}, nil)
 	if err != nil {
 		panic(err)
 	}

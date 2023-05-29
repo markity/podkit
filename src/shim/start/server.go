@@ -14,7 +14,12 @@ import (
 	"sync"
 	"syscall"
 )
-import "time"
+import (
+	"runtime"
+	"time"
+
+	"golang.org/x/sys/unix"
+)
 
 func RunServer(sendWhenListenFinished chan struct{}, sendWhenListenClosed chan struct{}) {
 	// 下面监听网络连接, 操作容器
@@ -25,6 +30,7 @@ func RunServer(sendWhenListenFinished chan struct{}, sendWhenListenClosed chan s
 	listener.SetUnlinkOnClose(true)
 	defer listener.Close()
 
+	// 等待开始Listen的时候才能给start命令得以结束
 	sendWhenListenFinished <- struct{}{}
 
 	// 标志位, 使程序进入"正在关闭"的状态
@@ -38,13 +44,14 @@ func RunServer(sendWhenListenFinished chan struct{}, sendWhenListenClosed chan s
 	ptyMasterFileMap := make(map[int]*os.File)
 	ptySlaveFileMap := make(map[int]*os.File)
 	connClosedNotifySentNotify := make(chan struct{}, 1)
-	mu := sync.Mutex{}
+	mu := sync.Mutex{} // 保护上面的一切数据
 
 	// 开启shim-reaper, 负责收割所有执行完毕的侵入容器的子进程
 	go func() {
 		waitPIDChan := make(chan int)
 		go func() {
 			for {
+				// init进程永远在运行, 因此这里出错是致命的
 				wpid, err := syscall.Wait4(-1, nil, 0, nil)
 				waitPIDChan <- wpid
 				if err != nil {
@@ -57,13 +64,15 @@ func RunServer(sendWhenListenFinished chan struct{}, sendWhenListenClosed chan s
 			select {
 			case wpid := <-waitPIDChan:
 				mu.Lock()
-				interactiveNotifyExitedMap[wpid] <- struct{}{}
-				delete(interactiveNotifyExitedMap, wpid)
-				delete(interactiveNotifyContainerClosedMap, wpid)
-				ptySlaveFileMap[wpid].Close()
-				ptyMasterFileMap[wpid].Close()
-				delete(ptyMasterFileMap, wpid)
-				delete(ptySlaveFileMap, wpid)
+				if c, ok := interactiveNotifyExitedMap[wpid]; ok {
+					c <- struct{}{}
+					delete(interactiveNotifyExitedMap, wpid)
+					delete(interactiveNotifyContainerClosedMap, wpid)
+					ptySlaveFileMap[wpid].Close()
+					ptyMasterFileMap[wpid].Close()
+					delete(ptyMasterFileMap, wpid)
+					delete(ptySlaveFileMap, wpid)
+				}
 
 				if closing {
 					for k, v := range interactiveNotifyContainerClosedMap {
@@ -102,20 +111,13 @@ func RunServer(sendWhenListenFinished chan struct{}, sendWhenListenClosed chan s
 			panic(err)
 		}
 
-		lengthBytes := make([]byte, 4)
-		_, err = io.ReadFull(c, lengthBytes)
-		if err != nil {
-			panic(err)
-		}
-
-		packetBytes := make([]byte, binary.BigEndian.Uint32(lengthBytes))
-		_, err = io.ReadFull(c, packetBytes)
+		packetBytes, err := tools.ReadPacketWith4BytesLengthHeader(c)
 		if err != nil {
 			panic(err)
 		}
 
 		switch packet := commpacket.ServerParsePacket(packetBytes).(type) {
-		case *commpacket.ClientRequestCloseContainer:
+		case *commpacket.PacketClientCloseContainerRequest:
 			mu.Lock()
 			closing = true
 			mu.Unlock()
@@ -124,12 +126,12 @@ func RunServer(sendWhenListenFinished chan struct{}, sendWhenListenClosed chan s
 				<-v
 				ptyMasterFileMap[k].Close()
 			}
-			_, err := c.Write(tools.DoPackWith4Bytes((&commpacket.ServerNotifyContainerClosedSuccesfully{}).MustMarshalToBytes()))
+			_, err := c.Write(tools.DoPackWith4Bytes((&commpacket.PacketServerContainerClosedOK{}).MustMarshalToBytes()))
 			if err != nil {
 				panic(err)
 			}
 			goto out
-		case *commpacket.ClientRequestExecBackground:
+		case *commpacket.PacketClientExecBackgroundRequest:
 			pipeReader, pipeWriter := io.Pipe()
 			//cmd := exec.Command("podkit_shim", "exec", "back", fmt.Sprintf("%d", ContainerID), packet.Command)
 			cmd := exec.Command("podkit_shim_exec_back", fmt.Sprintf("%d", ContainerID), packet.Command)
@@ -148,13 +150,13 @@ func RunServer(sendWhenListenFinished chan struct{}, sendWhenListenClosed chan s
 			}
 
 			if result[0] == 0 {
-				c.Write(tools.DoPackWith4Bytes((&commpacket.ServerExecBackgroundResp{CommandExists: true}).MustMarshalToBytes()))
+				c.Write(tools.DoPackWith4Bytes((&commpacket.PacketServerExecBackgroundResponse{CommandExists: true}).MustMarshalToBytes()))
 			} else {
-				c.Write(tools.DoPackWith4Bytes((&commpacket.ServerExecBackgroundResp{CommandExists: false}).MustMarshalToBytes()))
+				c.Write(tools.DoPackWith4Bytes((&commpacket.PacketServerExecBackgroundResponse{CommandExists: false}).MustMarshalToBytes()))
 			}
 			c.Close()
 			continue
-		case *commpacket.ClientRequestExecInteractive:
+		case *commpacket.PacketClientExecInteractiveRequest:
 			ptyMasterFile, err := os.OpenFile(fmt.Sprintf("/var/lib/podkit/container/%d/dev/pts/ptmx", ContainerID), os.O_RDWR, 0)
 			if err != nil {
 				panic(err)
@@ -175,6 +177,17 @@ func RunServer(sendWhenListenFinished chan struct{}, sendWhenListenClosed chan s
 				panic(err)
 			}
 
+			runtime.LockOSThread()
+			pidNS, err := syscall.Open(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/pid", ContainerID), os.O_RDONLY, 0)
+			if err != nil {
+				panic(err)
+			}
+
+			err = unix.Setns(pidNS, 0)
+			if err != nil {
+				panic(err)
+			}
+
 			pipeReader, pipeWriter := io.Pipe()
 			cmd := exec.Command("podkit_shim_exec_front", fmt.Sprint(ContainerID), packet.Command)
 			cmd.Env = []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
@@ -184,6 +197,7 @@ func RunServer(sendWhenListenFinished chan struct{}, sendWhenListenClosed chan s
 			if err != nil {
 				panic(err)
 			}
+			runtime.UnlockOSThread()
 
 			newProcPid := cmd.Process.Pid
 
@@ -194,17 +208,17 @@ func RunServer(sendWhenListenFinished chan struct{}, sendWhenListenClosed chan s
 				panic(err)
 			}
 
-			if result[0] == 0 {
-				// 如果有这个命令, 那么开启read, write pty转发
-				c.Write(tools.DoPackWith4Bytes((&commpacket.ServerInteractiveCommandResp{CommandExists: true}).MustMarshalToBytes()))
-			} else {
+			if result[0] == 1 {
 				// 没有这个命令直接返回
-				c.Write(tools.DoPackWith4Bytes((&commpacket.ServerInteractiveCommandResp{CommandExists: false}).MustMarshalToBytes()))
+				c.Write(tools.DoPackWith4Bytes((&commpacket.PacketServerExecInteractiveResponse{CommandExists: false}).MustMarshalToBytes()))
 				c.Close()
 				ptySlaveFile.Close()
 				ptyMasterFile.Close()
 				continue
 			}
+
+			// 如果有这个命令, 那么开启read, write pty转发
+			c.Write(tools.DoPackWith4Bytes((&commpacket.PacketServerExecInteractiveResponse{CommandExists: true}).MustMarshalToBytes()))
 
 			notifyWhenConnClosed := make(chan struct{}, 1)
 			notifyWhenCommandExited := make(chan struct{}, 1)
@@ -263,16 +277,14 @@ func handleInteractiveConn(c net.Conn, ptyMasterFile *os.File, notifyWhenCommand
 				return
 			}
 
-			newBs := make([]byte, n)
-			copy(newBs, bs)
-			readFromPtyMaster <- newBs
+			readFromPtyMaster <- bs[:n]
 		}
 	}()
 
 	for {
 		select {
 		case <-notifyWhenCommandExited:
-			_, err := c.Write(tools.DoPackWith4Bytes((&commpacket.ServerInteractiveCommandExited{}).MustMarshalToBytes()))
+			_, err := c.Write(tools.DoPackWith4Bytes((&commpacket.PacketServerNotifyExecInteractiveExited{}).MustMarshalToBytes()))
 			if err != nil {
 				panic(err)
 			}
@@ -280,7 +292,7 @@ func handleInteractiveConn(c net.Conn, ptyMasterFile *os.File, notifyWhenCommand
 			notifyWhenConnClosed <- struct{}{}
 			return
 		case <-notifyWhenContainerClosed:
-			_, err := c.Write(tools.DoPackWith4Bytes((&commpacket.ServerNotifyInteractiveExecContainerClosed{}).MustMarshalToBytes()))
+			_, err := c.Write(tools.DoPackWith4Bytes((&commpacket.PacketServerNotifyExecInteractiveContainerClosed{}).MustMarshalToBytes()))
 			if err != nil {
 				panic(err)
 			}
@@ -288,13 +300,13 @@ func handleInteractiveConn(c net.Conn, ptyMasterFile *os.File, notifyWhenCommand
 			notifyWhenConnClosed <- struct{}{}
 			return
 		case bs := <-readFromPtyMaster:
-			_, err := c.Write(tools.DoPackWith4Bytes((&commpacket.ServerSendPtyOutput{Data: string(bs)}).MustMarshalToBytes()))
+			_, err := c.Write(tools.DoPackWith4Bytes((&commpacket.PacketServerSendPtyOutput{Data: string(bs)}).MustMarshalToBytes()))
 			if err != nil {
 				panic(err)
 			}
 		case iface := <-readFromClientChan:
 			switch i := iface.(type) {
-			case *commpacket.ClientSendPtyInput:
+			case *commpacket.PacketClientSendPtyInput:
 				ptyMasterFile.Write([]byte(i.Data))
 			default:
 				panic(errors.New("unexpected error"))

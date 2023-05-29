@@ -56,5 +56,9 @@ int main(int argc, char **argv) {
     setsid();
     ioctl(0, TIOCSCTTY, NULL);
 
-    execv(runCmd, NULL);
+    char *arg[] = {
+        runCmd,
+        NULL
+    };
+    execv(runCmd, arg);
 }
