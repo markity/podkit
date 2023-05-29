@@ -123,7 +123,6 @@ var ExecCmd = &cobra.Command{
 				return
 			}
 
-			fmt.Println("呼呼")
 			// 此处要释放文件锁, 让其它podkit程序得以运行
 			flock.Release()
 
