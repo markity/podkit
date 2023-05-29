@@ -137,13 +137,23 @@ func RunServer(sendWhenListenFinished chan struct{}, sendWhenListenClosed chan s
 			}
 			goto out
 		case *commpacket.PacketClientExecBackgroundRequest:
+			pidNS, err := syscall.Open(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/pid", ContainerID), os.O_RDONLY, 0)
+			if err != nil {
+				panic(err)
+			}
+
+			err = unix.Setns(pidNS, 0)
+			if err != nil {
+				panic(err)
+			}
+
 			pipeReader, pipeWriter := io.Pipe()
 			//cmd := exec.Command("podkit_shim", "exec", "back", fmt.Sprintf("%d", ContainerID), packet.Command)
 			cmd := exec.Command("podkit_shim_exec_back", fmt.Sprintf("%d", ContainerID), packet.Command)
 			cmd.Env = []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
 			// stdout用来通知是否有这个命令
 			cmd.Stdout = pipeWriter
-			err := cmd.Start()
+			err = cmd.Start()
 			if err != nil {
 				panic(err)
 			}
@@ -187,11 +197,9 @@ func RunServer(sendWhenListenFinished chan struct{}, sendWhenListenClosed chan s
 				panic(err)
 			}
 
-			for i := 0; i < 100; i++ {
-				err = unix.Setns(pidNS, 0)
-				if err != nil {
-					panic(err)
-				}
+			err = unix.Setns(pidNS, 0)
+			if err != nil {
+				panic(err)
 			}
 
 			pipeReader, pipeWriter := io.Pipe()
@@ -224,6 +232,14 @@ func RunServer(sendWhenListenFinished chan struct{}, sendWhenListenClosed chan s
 
 			// 如果有这个命令, 那么开启read, write pty转发
 			c.Write(tools.DoPackWith4Bytes((&commpacket.PacketServerExecInteractiveResponse{CommandExists: true}).MustMarshalToBytes()))
+
+			ws := pty.Winsize{Rows: uint16(packet.Rows), Cols: uint16(packet.Cols)}
+
+			// 设置winsize
+			err = tools.Ioctl(ptyMasterFile.Fd(), pty.TIOCSWINSZ, uintptr(unsafe.Pointer(&ws)))
+			if err != nil {
+				panic(err)
+			}
 
 			notifyWhenConnClosed := make(chan struct{}, 1)
 			notifyWhenCommandExited := make(chan struct{}, 1)
