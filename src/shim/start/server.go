@@ -169,10 +169,9 @@ func RunServer(initProcPid int, sendWhenListenFinished chan struct{}, sendWhenLi
 			if err != nil {
 				goto p7
 			}
-		p8:
 			_, err := c.Write(tools.DoPackWith4Bytes((&commpacket.PacketServerContainerClosedOK{}).MustMarshalToBytes()))
 			if err != nil {
-				goto p8
+				panic(err)
 			}
 			goto out
 		case *commpacket.PacketClientExecBackgroundRequest:
