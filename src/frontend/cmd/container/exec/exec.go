@@ -106,7 +106,12 @@ var ExecCmd = &cobra.Command{
 				panic(err)
 			}
 
-			_, err = conn.Write(tools.DoPackWith4Bytes((&commpacket.PacketClientExecInteractiveRequest{Rows: rows, Cols: cols, Command: execCmd, Args: args[2:]}).MustMarshalToBytes()))
+			var termEnvPointer *string
+			termEnv, ok := os.LookupEnv("TERM")
+			if ok {
+				termEnvPointer = &termEnv
+			}
+			_, err = conn.Write(tools.DoPackWith4Bytes((&commpacket.PacketClientExecInteractiveRequest{Rows: rows, Cols: cols, Command: execCmd, Args: args[2:], TermEnv: termEnvPointer}).MustMarshalToBytes()))
 			if err != nil {
 				panic(err)
 			}

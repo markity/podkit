@@ -247,6 +247,9 @@ func RunServer(initProcPid int, sendWhenListenFinished chan struct{}, sendWhenLi
 			args = append(args, packet.Args...)
 			cmd := exec.Command("podkit_shim_exec_front", args...)
 			cmd.Env = []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
+			if packet.TermEnv != nil {
+				cmd.Env = append(cmd.Env, "TERM="+*packet.TermEnv)
+			}
 			cmd.Stdin = ptySlaveFile
 			cmd.Stdout = pipeWriter
 			err = cmd.Start()

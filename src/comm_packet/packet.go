@@ -45,6 +45,7 @@ type PacketClientExecInteractiveRequest struct {
 	Args    []string `json:"args"`
 	Rows    int      `json:"rows"`
 	Cols    int      `json:"cols"`
+	TermEnv *string  `json:"term_env"`
 }
 
 func (p *PacketClientExecInteractiveRequest) MustMarshalToBytes() []byte {
