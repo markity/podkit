@@ -71,6 +71,7 @@ func main() {
 		newStopped = append(newStopped, runningInfo.ContainerStopped...)
 		for _, v := range runningInfo.ContainerRunning {
 			prefix := fmt.Sprintf("/var/lib/podkit/container/%d", v.ContainerID)
+			syscall.Unmount(fmt.Sprintf("%s/etc/resolv.conf", prefix), 0)
 			syscall.Unmount(fmt.Sprintf("%s/dev/pts", prefix), 0)
 			syscall.Unmount(fmt.Sprintf("%s/dev/mqueue", prefix), 0)
 			syscall.Unmount(fmt.Sprintf("%s/dev/shm", prefix), 0)

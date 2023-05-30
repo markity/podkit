@@ -134,6 +134,11 @@ func RunServer(initProcPid int, sendWhenListenFinished chan struct{}, sendWhenLi
 			syscall.Kill(initProcPid, syscall.SIGKILL)
 			// 取消挂载
 			prefix := fmt.Sprintf("/var/lib/podkit/container/%d", ContainerID)
+		p0:
+			err = syscall.Unmount(fmt.Sprintf("%s/etc/resolv.conf", prefix), 0)
+			if err != nil {
+				goto p0
+			}
 		p1:
 			err = syscall.Unmount(fmt.Sprintf("%s/dev/pts", prefix), 0)
 			if err != nil {

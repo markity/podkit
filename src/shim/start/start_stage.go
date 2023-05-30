@@ -86,8 +86,14 @@ func startStage3() {
 	syscall.Sethostname([]byte(fmt.Sprintf("container%d", ContainerID)))
 	prefix := fmt.Sprintf("/var/lib/podkit/container/%d", ContainerID)
 
+	// 把resolve.conf挂载到容器中
+	err := syscall.Mount("/etc/resolv.conf", fmt.Sprintf("%s/etc/resolv.conf", prefix), "bind", syscall.MS_BIND|syscall.MS_RDONLY, "")
+	if err != nil {
+		panic(err)
+	}
+
 	// 挂载proc sys tmp dev
-	err := syscall.Mount("proc", fmt.Sprintf("%s/proc", prefix), "proc", 0, "")
+	err = syscall.Mount("proc", fmt.Sprintf("%s/proc", prefix), "proc", 0, "")
 	if err != nil {
 		panic(err)
 	}
