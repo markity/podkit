@@ -41,13 +41,17 @@ type MsgHeader struct {
 // 请求1, 客户端请求交互式执行
 type PacketClientExecInteractiveRequest struct {
 	MsgHeader
-	Command string `json:"cmd"`
-	Rows    int    `json:"rows"`
-	Cols    int    `json:"cols"`
+	Command string   `json:"cmd"`
+	Args    []string `json:"args"`
+	Rows    int      `json:"rows"`
+	Cols    int      `json:"cols"`
 }
 
 func (p *PacketClientExecInteractiveRequest) MustMarshalToBytes() []byte {
 	p.MsgHeader.Type = TypePacketClientExecInteractiveRequest
+	if p.Args == nil {
+		p.Args = make([]string, 0)
+	}
 	bs, err := json.Marshal(p)
 	if err != nil {
 		panic(err)
@@ -91,11 +95,15 @@ func (p *PacketServerSendPtyOutput) MustMarshalToBytes() []byte {
 // 请求2, 客户端发来的消息是用来exec -d
 type PacketClientExecBackgroundRequest struct {
 	MsgHeader
-	Command string `json:"cmd"`
+	Command string   `json:"cmd"`
+	Args    []string `json:"args"`
 }
 
 func (p *PacketClientExecBackgroundRequest) MustMarshalToBytes() []byte {
 	p.MsgHeader.Type = TypePacketClientExecBackgroundRequest
+	if p.Args == nil {
+		p.Args = make([]string, 0)
+	}
 	bs, err := json.Marshal(p)
 	if err != nil {
 		panic(err)

@@ -25,7 +25,7 @@ var ExecCmd = &cobra.Command{
 	Use:   "exec CONTAINER_ID COMMAND_PATH",
 	Short: "exec command in container specified by id",
 	Args: func(cmd *cobra.Command, args []string) error {
-		if len(args) != 2 {
+		if len(args) < 2 {
 			return errors.New("num of arguments is wrong")
 		}
 
@@ -106,7 +106,7 @@ var ExecCmd = &cobra.Command{
 				panic(err)
 			}
 
-			_, err = conn.Write(tools.DoPackWith4Bytes((&commpacket.PacketClientExecInteractiveRequest{Rows: rows, Cols: cols, Command: execCmd}).MustMarshalToBytes()))
+			_, err = conn.Write(tools.DoPackWith4Bytes((&commpacket.PacketClientExecInteractiveRequest{Rows: rows, Cols: cols, Command: execCmd, Args: args[2:]}).MustMarshalToBytes()))
 			if err != nil {
 				panic(err)
 			}
@@ -204,7 +204,7 @@ var ExecCmd = &cobra.Command{
 				}
 			}
 		} else {
-			_, err := conn.Write((tools.DoPackWith4Bytes((&commpacket.PacketClientExecBackgroundRequest{Command: execCmd}).MustMarshalToBytes())))
+			_, err := conn.Write((tools.DoPackWith4Bytes((&commpacket.PacketClientExecBackgroundRequest{Command: execCmd, Args: args[2:]}).MustMarshalToBytes())))
 			if err != nil {
 				panic(err)
 			}

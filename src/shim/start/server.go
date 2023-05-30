@@ -187,7 +187,9 @@ func RunServer(initProcPid int, sendWhenListenFinished chan struct{}, sendWhenLi
 
 			pipeReader, pipeWriter := io.Pipe()
 			//cmd := exec.Command("podkit_shim", "exec", "back", fmt.Sprintf("%d", ContainerID), packet.Command)
-			cmd := exec.Command("podkit_shim_exec_back", fmt.Sprintf("%d", ContainerID), packet.Command)
+			args := []string{fmt.Sprint(ContainerID), packet.Command}
+			args = append(args, packet.Args...)
+			cmd := exec.Command("podkit_shim_exec_back", args...)
 			cmd.Env = []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
 			// stdout用来通知是否有这个命令
 			cmd.Stdout = pipeWriter
@@ -241,7 +243,9 @@ func RunServer(initProcPid int, sendWhenListenFinished chan struct{}, sendWhenLi
 			}
 
 			pipeReader, pipeWriter := io.Pipe()
-			cmd := exec.Command("podkit_shim_exec_front", fmt.Sprint(ContainerID), packet.Command)
+			args := []string{fmt.Sprint(ContainerID), packet.Command}
+			args = append(args, packet.Args...)
+			cmd := exec.Command("podkit_shim_exec_front", args...)
 			cmd.Env = []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
 			cmd.Stdin = ptySlaveFile
 			cmd.Stdout = pipeWriter

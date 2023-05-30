@@ -56,9 +56,13 @@ int main(int argc, char **argv) {
     setsid();
     ioctl(0, TIOCSCTTY, NULL);
 
-    char *arg[] = {
-        runCmd,
-        NULL
-    };
+    char *arg[argc - 1];
+    // arg[0] = argv[2]
+    // arg[1] = argv[3]
+    arg[0] = runCmd;
+    for (int i = 1; i < argc - 2; i++) {
+        arg[i] = argv[i + 2];
+    }
+    arg[argc - 2] = NULL;
     execv(runCmd, arg);
 }
