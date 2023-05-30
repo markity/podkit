@@ -82,15 +82,7 @@ var StartCmd = &cobra.Command{
 
 		runningInfo.ContainerIDCount++
 
-		bs := runningInfo.MustMarshalToBytes()
-
-		runningInfoFile, err := os.OpenFile("/var/lib/podkit/running_info.json", os.O_WRONLY|os.O_TRUNC, 0)
-		if err != nil {
-			panic(err)
-		}
-		defer runningInfoFile.Close()
-
-		_, err = runningInfoFile.Write(bs)
+		err = runningInfo.WriteToFile("/var/lib/podkit/running_info.json")
 		if err != nil {
 			panic(err)
 		}

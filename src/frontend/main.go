@@ -85,15 +85,11 @@ func main() {
 		runningInfo.ContainerStopped = newStopped
 		runningInfo.ContainerRunning = newRunning
 
-		runningInfoFile, err := os.OpenFile("/var/lib/podkit/running_info.json", os.O_WRONLY|os.O_TRUNC, 0)
+		err = runningInfo.WriteToFile("/var/lib/podkit/running_info.json")
 		if err != nil {
 			panic(err)
 		}
 
-		_, err = runningInfoFile.Write(runningInfo.MustMarshalToBytes())
-		if err != nil {
-			panic(err)
-		}
 	}
 
 	lock.Release()

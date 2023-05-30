@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
 	commpacket "podkit/comm_packet"
 	"podkit/frontend/json_struct"
 	"podkit/frontend/tools"
@@ -122,11 +121,11 @@ var StopCmd = &cobra.Command{
 		newStopped = append(newStopped, runningInfo.ContainerStopped...)
 		runningInfo.ContainerRunning = newRunning
 		runningInfo.ContainerStopped = newStopped
-		runningInfoFile, err := os.OpenFile("/var/lib/podkit/running_info.json", os.O_WRONLY|os.O_TRUNC, 0)
+
+		err = runningInfo.WriteToFile("/var/lib/podkit/running_info.json")
 		if err != nil {
 			panic(err)
 		}
-		runningInfoFile.Write(runningInfo.MustMarshalToBytes())
 
 		fmt.Printf("conatiner %d closed successfully\n", id)
 	},

@@ -80,16 +80,10 @@ var RemoveCmd = &cobra.Command{
 		}
 		runningInfo.ContainerStopped = newStpped
 
-		f, err := os.OpenFile("/var/lib/podkit/running_info.json", os.O_WRONLY|os.O_TRUNC, 0)
+		err = runningInfo.WriteToFile("/var/lib/podkit/running_info.json")
 		if err != nil {
 			panic(err)
 		}
-
-		_, err = f.Write(runningInfo.MustMarshalToBytes())
-		if err != nil {
-			panic(err)
-		}
-		f.Close()
 
 		err = os.RemoveAll(fmt.Sprintf("/var/lib/podkit/container/%d", id))
 		if err != nil {

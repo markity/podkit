@@ -38,6 +38,16 @@ func (ris *RunningInfoStruct) MustMarshalToBytes() []byte {
 	return b
 }
 
+func (ris *RunningInfoStruct) WriteToFile(filePath string) error {
+	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_TRUNC, 0)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.Write(ris.MustMarshalToBytes())
+	return err
+}
+
 type ImageInfoStruct struct {
 	ImageTarFilename map[string]string `json:"image_tar_filename"`
 }

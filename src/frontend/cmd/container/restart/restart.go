@@ -3,7 +3,6 @@ package restart
 import (
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"podkit/frontend/json_struct"
 	"podkit/frontend/tools"
@@ -97,12 +96,7 @@ var RestartCmd = &cobra.Command{
 		runningInfo.ContainerRunning = newRunning
 		runningInfo.ContainerStopped = newStopped
 
-		runningInfoFile, err := os.OpenFile("/var/lib/podkit/running_info.json", os.O_WRONLY|os.O_TRUNC, 0)
-		if err != nil {
-			panic(err)
-		}
-
-		_, err = runningInfoFile.Write(runningInfo.MustMarshalToBytes())
+		err = runningInfo.WriteToFile("/var/lib/podkit/running_info.json")
 		if err != nil {
 			panic(err)
 		}
