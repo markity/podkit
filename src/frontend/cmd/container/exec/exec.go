@@ -22,7 +22,7 @@ func init() {
 }
 
 var ExecCmd = &cobra.Command{
-	Use:   "exec CONTAINER_ID COMMAND_PATH",
+	Use:   "exec CONTAINER_ID COMMAND_PATH [COMMAND_ARGS...]",
 	Short: "exec command in container specified by id",
 	Args: func(cmd *cobra.Command, args []string) error {
 		if len(args) < 2 {

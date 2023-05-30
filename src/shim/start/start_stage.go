@@ -83,6 +83,7 @@ func startStage2() {
 
 // 挂载文件, exec成为orphan_reaper
 func startStage3() {
+	syscall.Sethostname([]byte(fmt.Sprintf("container%d", ContainerID)))
 	prefix := fmt.Sprintf("/var/lib/podkit/container/%d", ContainerID)
 
 	// 挂载proc sys tmp dev

@@ -18,8 +18,8 @@ import (
 
 var RootCmd = &cobra.Command{
 	Use:               "podkit",
-	Short:             "Podkit is an easy linux container kit.",
-	Long:              "Podkit helps you better understand the mechanism of docker. It provides main functions to get you understand how docker works. ",
+	Short:             "Podkit is an easy linux container kit",
+	Long:              "Podkit helps you better understand the mechanism of docker\nIt provides main functions to get you understand how docker works",
 	CompletionOptions: cobra.CompletionOptions{DisableDefaultCmd: true},
 }
 

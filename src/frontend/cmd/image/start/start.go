@@ -13,7 +13,7 @@ import (
 
 var StartCmd = &cobra.Command{
 	Use:   "start IMAGE_NAME",
-	Short: "start a container and print its uuid",
+	Short: "start a container and print its id",
 	Args:  cobra.MatchAll(cobra.ExactArgs(1)),
 	Run: func(cmd *cobra.Command, args []string) {
 		syscall.Umask(0)
