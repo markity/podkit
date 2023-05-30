@@ -10,4 +10,4 @@ docker的拙劣模仿, 正在施工...预计使用以下机制:
     - user - NOT YET
 - 使用pty设备交互 - OK
 - veth网络 - NOT YET
-- 断电安全 - NOT YET
+- 断电安全 - OK

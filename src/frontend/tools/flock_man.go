@@ -5,6 +5,7 @@ import (
 	"syscall"
 )
 
+// 不线程安全
 type FlockManager struct {
 	init_already bool
 	locked       bool
@@ -45,6 +46,27 @@ func (fm *FlockManager) Release() error {
 	return err
 }
 
+func (fm *FlockManager) TryLock() (bool, error) {
+	if !fm.init_already {
+		return false, errors.New("FlockManager haven't been initialized yet")
+	}
+
+	if fm.locked {
+		return false, errors.New("trying lock a locked lock")
+	}
+
+	err := syscall.Flock(fm.fd, syscall.LOCK_EX|syscall.LOCK_NB)
+	if err != nil {
+		if err == syscall.EAGAIN {
+			return false, nil
+		}
+		return false, err
+	}
+
+	fm.locked = true
+	return true, nil
+}
+
 func (fm *FlockManager) Lock() error {
 	if !fm.init_already {
 		return errors.New("FlockManager haven't been initialized yet")
@@ -59,7 +81,6 @@ func (fm *FlockManager) Lock() error {
 	}
 
 	fm.locked = true
-
 	return nil
 }
 
