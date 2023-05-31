@@ -187,8 +187,15 @@ func startStage3() {
 		panic(err)
 	}
 
-	os.Mkdir(fmt.Sprintf("%s/proc", prefix), syscall.S_IWUSR|syscall.S_IRUSR|syscall.S_IXUSR|syscall.S_IRGRP|syscall.S_IXGRP|syscall.S_IXOTH)
-	os.Mkdir(fmt.Sprintf("%s/sys", prefix), syscall.S_IWUSR|syscall.S_IRUSR|syscall.S_IXUSR|syscall.S_IRGRP|syscall.S_IXGRP|syscall.S_IXOTH)
+	// 有的rootfs没有这两个文件夹, 需要手动创建
+	err = os.Mkdir(fmt.Sprintf("%s/proc", prefix), syscall.S_IWUSR|syscall.S_IRUSR|syscall.S_IXUSR|syscall.S_IRGRP|syscall.S_IXGRP|syscall.S_IXOTH)
+	if err != nil && err.(*os.PathError).Err != syscall.EEXIST {
+		panic(err)
+	}
+	err = os.Mkdir(fmt.Sprintf("%s/sys", prefix), syscall.S_IWUSR|syscall.S_IRUSR|syscall.S_IXUSR|syscall.S_IRGRP|syscall.S_IXGRP|syscall.S_IXOTH)
+	if err != nil && err.(*os.PathError).Err != syscall.EEXIST {
+		panic(err)
+	}
 
 	// 挂载proc sys tmp dev
 	err = syscall.Mount("proc", fmt.Sprintf("%s/proc", prefix), "proc", 0, "")
@@ -204,6 +211,11 @@ func startStage3() {
 		panic(err)
 	}
 	err = syscall.Mount("tmpfs", fmt.Sprintf("%s/dev", prefix), "tmpfs", 0, "")
+	if err != nil {
+		panic(err)
+	}
+
+	err = os.Chmod(fmt.Sprintf("%s/dev", prefix), 0751)
 	if err != nil {
 		panic(err)
 	}
@@ -261,6 +273,11 @@ func startStage3() {
 		panic(err)
 	}
 	err = unix.Mknod(fmt.Sprintf("%s/dev/zero", prefix), 0666|syscall.S_IFCHR, int(tools.MakeDev(1, 5)))
+	if err != nil {
+		panic(err)
+	}
+
+	syscall.Symlink("/dev/ptmx", "pts/ptmx")
 	if err != nil {
 		panic(err)
 	}

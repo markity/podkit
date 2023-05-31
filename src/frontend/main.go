@@ -109,13 +109,14 @@ func main() {
 			panic(err)
 		}
 
-		// 设置iptables规则
+		// TODO: 使用naive的轮子
 		iptablesCMD := exec.Command("iptables", "-t", "nat", "-A", "POSTROUTING", "-s", "172.16.0.0/16", "-j", "MASQUERADE")
 		err = iptablesCMD.Run()
 		if err != nil {
 			panic(err)
 		}
 
+		// TODO: 使用naive的轮子
 		sysctlCMD := exec.Command("sysctl", "-w", "net.ipv4.ip_forward=1")
 		err = sysctlCMD.Run()
 		if err != nil {

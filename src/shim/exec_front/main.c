@@ -14,6 +14,7 @@
 // 开启容器, 这里stdout是管道, 告知父进程有没有此命令
 // stdin是pty从设备
 int main(int argc, char **argv) {
+    umask(0022);
     char *containerIDStr = argv[1];
     char *runCmd = argv[2];
 
