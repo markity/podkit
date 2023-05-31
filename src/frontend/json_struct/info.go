@@ -14,6 +14,7 @@ type RunningInfoStruct struct {
 	ContainerIDCount int              `json:"container_id_count"`
 	ContainerRunning []*ContainerInfo `json:"container_running"`
 	ContainerStopped []*ContainerInfo `json:"container_stopped"`
+	IPUsedNow        int              `json:"ip_used_now"`
 }
 
 func (ris *RunningInfoStruct) ParseFromFile(filePath string) error {

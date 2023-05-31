@@ -17,20 +17,20 @@ int main(int argc, char **argv) {
     char *containerIDStr = argv[1];
     char *runCmd = argv[2];
 
-    // 切换namsespcae
+    // 切换namsespcae, pid namespace由父进程负责切换
     char tmpStr[64];
     sprintf(tmpStr, "/var/lib/podkit/container/%s/proc/1/ns/ipc", containerIDStr);
     int ipcNSFD = open(tmpStr, O_RDONLY, 0);
     sprintf(tmpStr, "/var/lib/podkit/container/%s/proc/1/ns/mnt", containerIDStr);
     int mntNSFD = open(tmpStr, O_RDONLY, 0);
-    sprintf(tmpStr, "/var/lib/podkit/container/%s/proc/1/ns/pid", containerIDStr);
-    int pidNSFD = open(tmpStr, O_RDONLY, 0);
     sprintf(tmpStr, "/var/lib/podkit/container/%s/proc/1/ns/uts", containerIDStr);
     int utsNSFD = open(tmpStr, O_RDONLY, 0);
+    sprintf(tmpStr, "/var/lib/podkit/container/%s/proc/1/ns/net", containerIDStr);
+    int netNSFD = open(tmpStr, O_RDONLY, 0);
     setns(ipcNSFD, 0);
     setns(mntNSFD, 0);
-    setns(pidNSFD, 0);
     setns(utsNSFD, 0);
+    setns(netNSFD, 0);
 
     sprintf(tmpStr, "/var/lib/podkit/container/%s", containerIDStr);
     chroot(tmpStr);

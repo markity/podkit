@@ -1,12 +1,19 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"podkit/frontend/tools"
+	shim_tools "podkit/shim/tools"
 	"syscall"
+
+	"github.com/docker/libcontainer/netlink"
+	"github.com/milosgajdos/tenus"
+	vlink "github.com/vishvananda/netlink"
 
 	"golang.org/x/sys/unix"
 )
@@ -15,7 +22,7 @@ import (
 // 因此这里用了pipe做通讯
 func startStage1() {
 	pipeReader, pipeWriter := io.Pipe()
-	cmd := exec.Command("podkit_shim", "start", "stage2", fmt.Sprint(ContainerID))
+	cmd := exec.Command("podkit_shim", "start", "stage2", fmt.Sprint(ContainerID), IPAddr)
 	cmd.Stdout = pipeWriter
 	_, err := syscall.Setsid()
 	if err != nil {
@@ -41,13 +48,13 @@ func startStage2() {
 
 	// 需要等待stage3完成挂载, 创建设备节点, 创建软链接等工作之后再进入监听状态
 	// 因此这里用了pipe
-	cmd := exec.Command("podkit_shim", "start", "stage3", fmt.Sprint(ContainerID))
+	cmd := exec.Command("podkit_shim", "start", "stage3", fmt.Sprint(ContainerID), IPAddr)
 	pipeReader, pipeWriter := io.Pipe()
 	cmd.Stdout = pipeWriter
 	cmd.Env = []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags: syscall.CLONE_NEWIPC | syscall.CLONE_NEWUTS |
-			syscall.CLONE_NEWNS | syscall.CLONE_NEWPID,
+			syscall.CLONE_NEWNS | syscall.CLONE_NEWPID | syscall.CLONE_NEWNET,
 	}
 
 	// 子进程现在在新的namespace下, 运行的stage3
@@ -60,6 +67,89 @@ func startStage2() {
 	// 等待子进程完成文件挂载等工作
 	bs := make([]byte, 1)
 	_, err = pipeReader.Read(bs)
+	if err != nil {
+		panic(err)
+	}
+
+	// 配置net ns的网络
+
+	// 在容器中loopback网卡
+	containerInitProcNetNSPath := fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/net", ContainerID)
+	shim_tools.MustDoInNS(containerInitProcNetNSPath, func() {
+		link, err := vlink.LinkByName("lo")
+		if err != nil {
+			panic(err)
+		}
+
+		err = vlink.LinkSetUp(link)
+		if err != nil {
+			panic(err)
+		}
+	})
+
+	bridge, err := tenus.BridgeFromName("pkbr0")
+	if err != nil {
+		panic(err)
+	}
+
+	// 创建veth网卡
+	vethName := fmt.Sprintf("pk%d", ContainerID)
+	vethPeerName := fmt.Sprintf("pkpeer%d", ContainerID)
+	err = netlink.NetworkCreateVethPair(vethName, vethPeerName, 1000)
+	if err != nil {
+		panic(err)
+	}
+
+	vethIface, err := net.InterfaceByName(vethName)
+	if err != nil {
+		panic(err)
+	}
+	vethPeerIface, err := net.InterfaceByName(vethPeerName)
+	if err != nil {
+		panic(err)
+	}
+
+	// 随机产生mac
+	err = netlink.SetMacAddress(vethName, tools.RandMacAddr())
+	if err != nil {
+		panic(err)
+	}
+
+	// 将veth移入namespace
+	netNSFile, err := os.OpenFile(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/net", ContainerID), os.O_RDONLY, 0)
+	if err != nil {
+		panic(errors.New("here5" + err.Error()))
+	}
+	err = netlink.NetworkSetNsFd(vethIface, int(netNSFile.Fd()))
+	if err != nil {
+		panic(errors.New("here4" + err.Error()))
+	}
+	netNSFile.Close()
+
+	// 设置新名字并启动
+	shim_tools.MustDoInNS(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/net", ContainerID), func() {
+		err = netlink.ChangeName(vethIface, "eth0")
+		if err != nil {
+			panic(err)
+		}
+		// 设置veth的ip
+		err = netlink.NetworkLinkAddIp(vethIface, net.ParseIP(IPAddr).To4(), &net.IPNet{IP: net.IPv4(172, 1, 0, 0), Mask: net.IPv4Mask(255, 255, 0, 0)})
+		if err != nil {
+			panic(err)
+		}
+		err = netlink.NetworkLinkUp(vethIface)
+		if err != nil {
+			panic(err)
+		}
+
+		err = netlink.AddRoute("0.0.0.0/0", "0.0.0.0", "172.16.0.1", "eth0")
+		if err != nil {
+			panic(err)
+		}
+	})
+
+	// 将vethpeer添加进网桥
+	err = bridge.AddSlaveIfc(vethPeerIface)
 	if err != nil {
 		panic(err)
 	}
@@ -86,11 +176,19 @@ func startStage3() {
 	syscall.Sethostname([]byte(fmt.Sprintf("container%d", ContainerID)))
 	prefix := fmt.Sprintf("/var/lib/podkit/container/%d", ContainerID)
 
-	// 把resolve.conf挂载到容器中
-	err := syscall.Mount("/etc/resolv.conf", fmt.Sprintf("%s/etc/resolv.conf", prefix), "bind", syscall.MS_BIND|syscall.MS_RDONLY, "")
+	// 把resolv.conf挂载到容器中
+	f, err := os.Create(fmt.Sprintf("%s/etc/resolv.conf", prefix))
 	if err != nil {
 		panic(err)
 	}
+	f.Close()
+	err = syscall.Mount("/etc/resolv.conf", fmt.Sprintf("%s/etc/resolv.conf", prefix), "bind", syscall.MS_BIND|syscall.MS_RDONLY, "")
+	if err != nil {
+		panic(err)
+	}
+
+	os.Mkdir(fmt.Sprintf("%s/proc", prefix), syscall.S_IWUSR|syscall.S_IRUSR|syscall.S_IXUSR|syscall.S_IRGRP|syscall.S_IXGRP|syscall.S_IXOTH)
+	os.Mkdir(fmt.Sprintf("%s/sys", prefix), syscall.S_IWUSR|syscall.S_IRUSR|syscall.S_IXUSR|syscall.S_IRGRP|syscall.S_IXGRP|syscall.S_IXOTH)
 
 	// 挂载proc sys tmp dev
 	err = syscall.Mount("proc", fmt.Sprintf("%s/proc", prefix), "proc", 0, "")

@@ -9,6 +9,7 @@ import (
 // podkit_shim
 
 var ContainerID int
+var IPAddr string
 
 // podkit_shim start stagen 容器id(int类型)
 // podkit_shim exec back 容器id 命令
@@ -29,6 +30,7 @@ func main() {
 			panic(err)
 		}
 		ContainerID = containerID
+		IPAddr = os.Args[4]
 		switch stage {
 		case "stage1":
 			startStage1()

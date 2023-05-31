@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"podkit/frontend/cmd/container"
@@ -13,6 +14,7 @@ import (
 	"podkit/frontend/tools"
 	"syscall"
 
+	"github.com/milosgajdos/tenus"
 	"github.com/spf13/cobra"
 )
 
@@ -91,6 +93,34 @@ func main() {
 			panic(err)
 		}
 
+		// 创建网桥
+		br0, err := tenus.NewBridgeWithName("pkbr0")
+		if err != nil {
+			panic(err)
+		}
+
+		err = br0.SetLinkIp(net.IPv4(172, 16, 0, 1), &net.IPNet{IP: net.IPv4(172, 16, 0, 0), Mask: net.IPv4Mask(255, 255, 0, 0)})
+		if err != nil {
+			panic(err)
+		}
+
+		err = br0.SetLinkUp()
+		if err != nil {
+			panic(err)
+		}
+
+		// 设置iptables规则
+		iptablesCMD := exec.Command("iptables", "-t", "nat", "-A", "POSTROUTING", "-s", "172.16.0.0/16", "-j", "MASQUERADE")
+		err = iptablesCMD.Run()
+		if err != nil {
+			panic(err)
+		}
+
+		sysctlCMD := exec.Command("sysctl", "-w", "net.ipv4.ip_forward=1")
+		err = sysctlCMD.Run()
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	lock.Release()

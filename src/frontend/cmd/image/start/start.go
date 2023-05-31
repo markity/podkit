@@ -70,8 +70,13 @@ var StartCmd = &cobra.Command{
 		// TODO: 用golang提供的函数解压
 		exec.Command("tar", "-xvf", imageFilePath, "-C", fmt.Sprintf("/var/lib/podkit/container/%d", currentContainerID)).Run()
 
+		ipPoll := tools.NewAddrPool("172.16.0.0/16")
+		for i := 0; i < runningInfo.IPUsedNow; i++ {
+			ipPoll.Next()
+		}
+
 		// 开启shim程序, 等待stage1执行完毕, stage1执行完毕后socket文件已经创建且进入监听状态
-		shimCmd := exec.Command("podkit_shim", "start", "stage1", fmt.Sprintf("%d", currentContainerID))
+		shimCmd := exec.Command("podkit_shim", "start", "stage1", fmt.Sprintf("%d", currentContainerID), ipPoll.Next().String())
 		shimCmd.Run()
 
 		// 更新running_info.json
@@ -81,6 +86,7 @@ var StartCmd = &cobra.Command{
 		})
 
 		runningInfo.ContainerIDCount++
+		runningInfo.IPUsedNow++
 
 		err = runningInfo.WriteToFile("/var/lib/podkit/running_info.json")
 		if err != nil {

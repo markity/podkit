@@ -76,7 +76,12 @@ var RestartCmd = &cobra.Command{
 
 		println("restarting...")
 
-		shimCmd := exec.Command("podkit_shim", "start", "stage1", fmt.Sprintf("%d", id))
+		ipPoll := tools.NewAddrPool("172.16.0.0/16")
+		for i := 0; i < runningInfo.IPUsedNow; i++ {
+			ipPoll.Next()
+		}
+
+		shimCmd := exec.Command("podkit_shim", "start", "stage1", fmt.Sprintf("%d", id), fmt.Sprint(ipPoll.Next().String()))
 		shimCmd.Run()
 
 		newRunning := make([]*json_struct.ContainerInfo, 0)
