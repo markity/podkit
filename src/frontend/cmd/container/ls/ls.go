@@ -32,11 +32,11 @@ var LsCmd = &cobra.Command{
 
 		fmt.Println("---stopped:")
 		for _, v := range runningInfo.ContainerStopped {
-			fmt.Printf("%d %s\n", v.ContainerID, v.ContainerImageName)
+			fmt.Printf("%d %s %s \n", v.ContainerID, v.ContainerImageName, v.IP)
 		}
 		fmt.Println("---running:")
 		for _, v := range runningInfo.ContainerRunning {
-			fmt.Printf("%d %s\n", v.ContainerID, v.ContainerImageName)
+			fmt.Printf("%d %s %s\n", v.ContainerID, v.ContainerImageName, v.IP)
 		}
 	},
 }
