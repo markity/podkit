@@ -29,10 +29,22 @@ func execBackground(commandPath string) {
 		panic(err)
 	}
 
-	unix.Setns(ipcNS, 0)
-	unix.Setns(mntNS, 0)
-	unix.Setns(pidNS, 0)
-	unix.Setns(utsNS, 0)
+	err = unix.Setns(ipcNS, 0)
+	if err != nil {
+		panic(err)
+	}
+	err = unix.Setns(mntNS, 0)
+	if err != nil {
+		panic(err)
+	}
+	err = unix.Setns(pidNS, 0)
+	if err != nil {
+		panic(err)
+	}
+	err = unix.Setns(utsNS, 0)
+	if err != nil {
+		panic(err)
+	}
 
 	openMax, err := sysconf.Sysconf(sysconf.SC_OPEN_MAX)
 	if err != nil {
