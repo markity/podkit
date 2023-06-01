@@ -373,8 +373,9 @@ func handleInteractiveConn(c net.Conn, ptyMasterFile *os.File, notifyWhenCommand
 					panic(err)
 				}
 			}
-		case err := <-errorChan:
-			panic(err)
+		case <-errorChan:
+			c.Close()
+			notifyWhenConnClosed <- struct{}{}
 		}
 	}
 }
