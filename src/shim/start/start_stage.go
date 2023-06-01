@@ -170,6 +170,7 @@ func startStage2() {
 }
 
 // 挂载文件, exec成为orphan_reaper
+// stage3已经创建了新的ns
 func startStage3() {
 	syscall.Sethostname([]byte(fmt.Sprintf("container%d", ContainerID)))
 	prefix := fmt.Sprintf("/var/lib/podkit/container/%d", ContainerID)
@@ -286,21 +287,23 @@ func startStage3() {
 		panic(err)
 	}
 
+	// 隔离文件
+	err = os.Chdir(prefix)
+	if err != nil {
+		panic(err)
+	}
+	err = os.Chdir("/")
+	if err != nil {
+		panic(err)
+	}
+
 	// 通知父进程挂载完毕
 	_, err = os.Stdout.Write([]byte{1})
 	if err != nil {
 		panic(err)
 	}
 
-	// 现在可以安全关闭所有引用的fd
-	// TODO: 不能syscall.Close
-	// n, err := sysconf.Sysconf(sysconf.SC_OPEN_MAX)
-	// if err != nil {
-	// 	f.Write([]byte("2\n"))
-	// 	panic(err)
-	// }
-
-	err = syscall.Exec("/bin/podkit_orphan_reaper", []string{"init"}, nil)
+	err = syscall.Exec("/bin/podkit_orphan_reaper", []string{"podkit_orphan_reaper"}, nil)
 	if err != nil {
 		panic(err)
 	}

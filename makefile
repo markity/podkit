@@ -17,8 +17,7 @@ install:
 	touch /var/lib/podkit/lock_check_reboot
 	cp install_files/running_info.json /var/lib/podkit
 	cp install_files/images/image_info.json /var/lib/podkit/images
-	cp  install_files/images/ubuntu2204.tar /var/lib/podkit/images
-	cp install_files/images/busybox.tar /var/lib/podkit/images
+	cp  install_files/images/*.tar /var/lib/podkit/images
 	cp src/frontend/frontend /bin/podkit
 	cp src/orphan_reaper/orphan_reaper /bin/podkit_orphan_reaper
 	cp src/shim/start/podkit_shim /bin/podkit_shim

@@ -37,9 +37,8 @@ var ExecCmd = &cobra.Command{
 		return nil
 	},
 	Run: func(cmd *cobra.Command, args []string) {
+		// id的Atoi不用检查, 因为Args里面已经检查了
 		id, _ := strconv.Atoi(args[0])
-		_ = args[1]
-
 		execCmd := args[1]
 
 		flock := tools.FlockManager{}
@@ -101,6 +100,11 @@ var ExecCmd = &cobra.Command{
 
 		// 与stage2的监听进程建立连接
 		if interactive {
+			if !term.IsTerminal(int(os.Stdin.Fd())) {
+				fmt.Println("stdin/out/err must be pty or tty device in interactive mode")
+				flock.Release()
+				return
+			}
 			rows, cols, err := pty.Getsize(os.Stdin)
 			if err != nil {
 				panic(err)
@@ -115,13 +119,12 @@ var ExecCmd = &cobra.Command{
 			if err != nil {
 				panic(err)
 			}
-			// 读取第一个包, 查看是否有这个命令
 
+			// 读取第一个包, 查看是否有这个命令
 			packetBytes, err := tools.ReadPacketWith4BytesLengthHeader(conn)
 			if err != nil {
 				panic(err)
 			}
-
 			if !commpacket.ClientParsePacket(packetBytes).(*commpacket.PacketServerExecInteractiveResponse).CommandExists {
 				fmt.Println("command does not exists, check it again")
 				flock.Release()
@@ -179,13 +182,11 @@ var ExecCmd = &cobra.Command{
 						term.Restore(int(os.Stdin.Fd()), oldState)
 						conn.Close()
 						fmt.Println("container is closed")
-						flock.Release()
 						return
 					case *commpacket.PacketServerNotifyExecInteractiveExited:
 						term.Restore(int(os.Stdin.Fd()), oldState)
 						conn.Close()
 						fmt.Println("command exited")
-						flock.Release()
 						return
 					case *commpacket.PacketServerSendPtyOutput:
 						os.Stdout.Write([]byte(packet.Data))

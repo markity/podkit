@@ -30,13 +30,21 @@ var LsCmd = &cobra.Command{
 			panic(err)
 		}
 
-		fmt.Println("---stopped:")
-		for _, v := range runningInfo.ContainerStopped {
-			fmt.Printf("%d %s %s \n", v.ContainerID, v.ContainerImageName, v.IP)
+		fmt.Println("---stopped---:")
+		if len(runningInfo.ContainerStopped) == 0 {
+			fmt.Println("(none)")
+		} else {
+			for _, v := range runningInfo.ContainerStopped {
+				fmt.Printf("%d %s %s\n", v.ContainerID, v.ContainerImageName, v.IP)
+			}
 		}
-		fmt.Println("---running:")
-		for _, v := range runningInfo.ContainerRunning {
-			fmt.Printf("%d %s %s\n", v.ContainerID, v.ContainerImageName, v.IP)
+		fmt.Println("---running---:")
+		if len(runningInfo.ContainerRunning) == 0 {
+			fmt.Println("(none)")
+		} else {
+			for _, v := range runningInfo.ContainerRunning {
+				fmt.Printf("%d %s %s\n", v.ContainerID, v.ContainerImageName, v.IP)
+			}
 		}
 	},
 }

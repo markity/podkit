@@ -53,6 +53,10 @@ int main(int argc, char **argv) {
     dup(0);
     dup(0);
 
+    for (size_t i = 0; i < sysconf(_SC_OPEN_MAX); i++) {
+        close(i+3);
+    }
+
     setsid();
 
     char *arg[argc - 1];

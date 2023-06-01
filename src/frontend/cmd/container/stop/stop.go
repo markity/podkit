@@ -1,10 +1,8 @@
 package stop
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	commpacket "podkit/comm_packet"
 	"podkit/frontend/json_struct"
@@ -91,14 +89,7 @@ var StopCmd = &cobra.Command{
 			panic(err)
 		}
 
-		lengthBytes := make([]byte, 4)
-		_, err = io.ReadFull(conn, lengthBytes)
-		if err != nil {
-			panic(err)
-		}
-
-		packetBytes := make([]byte, binary.BigEndian.Uint32(lengthBytes))
-		_, err = io.ReadFull(conn, packetBytes)
+		packetBytes, err := tools.ReadPacketWith4BytesLengthHeader(conn)
 		if err != nil {
 			panic(err)
 		}
