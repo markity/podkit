@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -56,7 +55,6 @@ func startStage2() {
 		Cloneflags: syscall.CLONE_NEWIPC | syscall.CLONE_NEWUTS |
 			syscall.CLONE_NEWNS | syscall.CLONE_NEWPID | syscall.CLONE_NEWNET,
 	}
-
 	// 子进程现在在新的namespace下, 运行的stage3
 	err := cmd.Start()
 	if err != nil {
@@ -118,11 +116,11 @@ func startStage2() {
 	// 将veth移入namespace
 	netNSFile, err := os.OpenFile(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/net", ContainerID), os.O_RDONLY, 0)
 	if err != nil {
-		panic(errors.New("here5" + err.Error()))
+		panic(err)
 	}
 	err = netlink.NetworkSetNsFd(vethIface, int(netNSFile.Fd()))
 	if err != nil {
-		panic(errors.New("here4" + err.Error()))
+		panic(err)
 	}
 	netNSFile.Close()
 
@@ -277,8 +275,14 @@ func startStage3() {
 		panic(err)
 	}
 
-	syscall.Symlink("/dev/ptmx", "pts/ptmx")
+	err = syscall.Chdir(fmt.Sprintf("%s/dev", prefix))
 	if err != nil {
+		panic(err)
+	}
+	err = syscall.Symlink("pts/ptmx", "ptmx")
+	if err != nil {
+		f, _ := os.Create("/home/markity/Documents/Code/Github/podkit/log")
+		f.WriteString(err.Error())
 		panic(err)
 	}
 

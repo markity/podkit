@@ -62,6 +62,7 @@ var RestartCmd = &cobra.Command{
 				if v.ContainerID == id {
 					exists = true
 					running = false
+					containerIP = v.IP
 				}
 			}
 		}
