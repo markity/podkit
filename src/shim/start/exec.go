@@ -89,17 +89,32 @@ func execFrontground(commandPath string, ptyNum int) {
 		panic(err)
 	}
 
-	unix.Setns(ipcNS, 0)
-	unix.Setns(mntNS, 0)
-	unix.Setns(pidNS, 0)
-	unix.Setns(utsNS, 0)
+	err = unix.Setns(ipcNS, 0)
+	if err != nil {
+		panic(err)
+	}
+	err = unix.Setns(mntNS, 0)
+	if err != nil {
+		panic(err)
+	}
+	err = unix.Setns(pidNS, 0)
+	if err != nil {
+		panic(err)
+	}
+	err = unix.Setns(utsNS, 0)
+	if err != nil {
+		panic(err)
+	}
 
 	err = syscall.Chroot(fmt.Sprintf("/var/lib/podkit/container/%d", ContainerID))
 	if err != nil {
 		panic(err)
 	}
 
-	os.Chdir("/")
+	err = os.Chdir("/")
+	if err != nil {
+		panic(err)
+	}
 
 	cmdPath, err := exec.LookPath(commandPath)
 	if err != nil {
