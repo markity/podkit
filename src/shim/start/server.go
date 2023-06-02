@@ -195,7 +195,7 @@ func RunServer(initProcPid int, sendWhenListenFinished chan struct{}, sendWhenLi
 			args := []string{fmt.Sprint(ContainerID), packet.Command}
 			args = append(args, packet.Args...)
 			cmd := exec.Command("podkit_shim_exec_back", args...)
-			cmd.Env = []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
+			cmd.Env = []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "USER=root", "HOME=/root"}
 			// stdout用来通知是否有这个命令
 			cmd.Stdout = pipeWriter
 			err = cmd.Start()
@@ -251,7 +251,7 @@ func RunServer(initProcPid int, sendWhenListenFinished chan struct{}, sendWhenLi
 			args := []string{fmt.Sprint(ContainerID), packet.Command}
 			args = append(args, packet.Args...)
 			cmd := exec.Command("podkit_shim_exec_front", args...)
-			cmd.Env = []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
+			cmd.Env = []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "USER=root", "HOME=/root"}
 			if packet.TermEnv != nil {
 				cmd.Env = append(cmd.Env, "TERM="+*packet.TermEnv)
 			}
