@@ -8,10 +8,7 @@ import (
 
 // podkit_shim
 
-var ContainerID int
-var IPAddr string
-
-// podkit_shim start stagen 容器id(int类型)
+// podkit_shim start stagen 容器id(int类型) ip地址
 // podkit_shim exec back 容器id 命令
 // podkit_shim exec front 容器id slave_num 命令
 func main() {
@@ -29,15 +26,14 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		ContainerID = containerID
-		IPAddr = os.Args[4]
+		ipaddr := os.Args[4]
 		switch stage {
 		case "stage1":
-			startStage1()
+			startStage1(containerID, ipaddr)
 		case "stage2":
-			startStage2()
+			startStage2(containerID, ipaddr)
 		case "stage3":
-			startStage3()
+			startStage3(containerID, ipaddr)
 		default:
 			panic(errors.New("unexpected error"))
 		}
@@ -55,7 +51,6 @@ func main() {
 		}
 
 		containerID, err := strconv.Atoi(os.Args[3])
-		ContainerID = containerID
 		if err != nil {
 			panic(errors.New("unexpected error"))
 		}
@@ -63,7 +58,7 @@ func main() {
 		// podkit_shim exec back container_id
 		if background {
 			cmdPath := os.Args[4]
-			execBackground(cmdPath)
+			execBackground(containerID, cmdPath)
 		} else {
 			slaveNumString := os.Args[4]
 			slaveNum, err := strconv.Atoi(slaveNumString)
@@ -71,7 +66,7 @@ func main() {
 				panic(errors.New("unexpected error"))
 			}
 			cmdPath := os.Args[5]
-			execFrontground(cmdPath, slaveNum)
+			execFrontground(containerID, cmdPath, slaveNum)
 		}
 	}
 

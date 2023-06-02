@@ -19,9 +19,9 @@ import (
 
 // stage1: 创建自己的守护进程, 进入stage2, 务必让stage2进入listen之后再结束程序
 // 因此这里用了pipe做通讯
-func startStage1() {
+func startStage1(containerID int, ipaddr string) {
 	pipeReader, pipeWriter := io.Pipe()
-	cmd := exec.Command("podkit_shim", "start", "stage2", fmt.Sprint(ContainerID), IPAddr)
+	cmd := exec.Command("podkit_shim", "start", "stage2", fmt.Sprint(containerID), ipaddr)
 	cmd.Stdout = pipeWriter
 	_, err := syscall.Setsid()
 	if err != nil {
@@ -42,12 +42,12 @@ func startStage1() {
 }
 
 // stage2: 需要fork一个子进程作为容器的init进程(podkit_orphan_reaper), 同时监听过来的网络连接, 向容器插入进程
-func startStage2() {
+func startStage2(containerID int, ipaddr string) {
 	syscall.Umask(0)
 
 	// 需要等待stage3完成挂载, 创建设备节点, 创建软链接等工作之后再进入监听状态
 	// 因此这里用了pipe
-	cmd := exec.Command("podkit_shim", "start", "stage3", fmt.Sprint(ContainerID), IPAddr)
+	cmd := exec.Command("podkit_shim", "start", "stage3", fmt.Sprint(containerID), ipaddr)
 	pipeReader, pipeWriter := io.Pipe()
 	cmd.Stdout = pipeWriter
 	cmd.Env = []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
@@ -72,7 +72,7 @@ func startStage2() {
 	// 配置net ns的网络
 
 	// 在容器中loopback网卡
-	containerInitProcNetNSPath := fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/net", ContainerID)
+	containerInitProcNetNSPath := fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/net", containerID)
 	shim_tools.MustDoInNS(containerInitProcNetNSPath, func() {
 		link, err := vlink.LinkByName("lo")
 		if err != nil {
@@ -91,8 +91,8 @@ func startStage2() {
 	}
 
 	// 创建veth网卡
-	vethName := fmt.Sprintf("pk%d", ContainerID)
-	vethPeerName := fmt.Sprintf("pkpeer%d", ContainerID)
+	vethName := fmt.Sprintf("pk%d", containerID)
+	vethPeerName := fmt.Sprintf("pkpeer%d", containerID)
 	err = netlink.NetworkCreateVethPair(vethName, vethPeerName, 1000)
 	if err != nil {
 		panic(err)
@@ -114,7 +114,7 @@ func startStage2() {
 	}
 
 	// 将veth移入namespace
-	netNSFile, err := os.OpenFile(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/net", ContainerID), os.O_RDONLY, 0)
+	netNSFile, err := os.OpenFile(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/net", containerID), os.O_RDONLY, 0)
 	if err != nil {
 		panic(err)
 	}
@@ -125,13 +125,13 @@ func startStage2() {
 	netNSFile.Close()
 
 	// 设置新名字并启动
-	shim_tools.MustDoInNS(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/net", ContainerID), func() {
+	shim_tools.MustDoInNS(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/net", containerID), func() {
 		err = netlink.ChangeName(vethIface, "eth0")
 		if err != nil {
 			panic(err)
 		}
 		// 设置veth的ip
-		err = netlink.NetworkLinkAddIp(vethIface, net.ParseIP(IPAddr).To4(), &net.IPNet{IP: net.IPv4(172, 1, 0, 0), Mask: net.IPv4Mask(255, 255, 0, 0)})
+		err = netlink.NetworkLinkAddIp(vethIface, net.ParseIP(ipaddr).To4(), &net.IPNet{IP: net.IPv4(172, 1, 0, 0), Mask: net.IPv4Mask(255, 255, 0, 0)})
 		if err != nil {
 			panic(err)
 		}
@@ -155,7 +155,7 @@ func startStage2() {
 	// 告知主线程目前的监听状态
 	listenFinished := make(chan struct{})
 	listenClosed := make(chan struct{})
-	go RunServer(initProcPid, listenFinished, listenClosed)
+	go RunServer(containerID, initProcPid, listenFinished, listenClosed)
 
 	// Server协程开始监听后就能告知父进程, 让stage1退出了, 然后start指令完成
 	<-listenFinished
@@ -171,9 +171,9 @@ func startStage2() {
 
 // 挂载文件, exec成为orphan_reaper
 // stage3已经创建了新的ns
-func startStage3() {
-	syscall.Sethostname([]byte(fmt.Sprintf("container%d", ContainerID)))
-	prefix := fmt.Sprintf("/var/lib/podkit/container/%d", ContainerID)
+func startStage3(containerID int, ipaddr string) {
+	syscall.Sethostname([]byte(fmt.Sprintf("container%d", containerID)))
+	prefix := fmt.Sprintf("/var/lib/podkit/container/%d", containerID)
 
 	// 把resolv.conf挂载到容器中
 	f, err := os.Create(fmt.Sprintf("%s/etc/resolv.conf", prefix))
@@ -282,8 +282,6 @@ func startStage3() {
 	}
 	err = syscall.Symlink("pts/ptmx", "ptmx")
 	if err != nil {
-		f, _ := os.Create("/home/markity/Documents/Code/Github/podkit/log")
-		f.WriteString(err.Error())
 		panic(err)
 	}
 

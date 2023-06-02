@@ -31,11 +31,11 @@ type interactiveRunningContext struct {
 	ConnClosedNotify chan struct{}
 }
 
-func RunServer(initProcPid int, sendWhenListenFinished chan struct{}, sendWhenListenClosed chan struct{}) {
+func RunServer(containerID int, initProcPid int, sendWhenListenFinished chan struct{}, sendWhenListenClosed chan struct{}) {
 	runtime.LockOSThread()
 
 	// 下面监听网络连接, 操作容器
-	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: fmt.Sprintf("/var/lib/podkit/socket/%d.sock", ContainerID), Net: "unix"})
+	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: fmt.Sprintf("/var/lib/podkit/socket/%d.sock", containerID), Net: "unix"})
 	if err != nil {
 		panic(err)
 	}
@@ -133,7 +133,7 @@ func RunServer(initProcPid int, sendWhenListenFinished chan struct{}, sendWhenLi
 			<-connClosedNotifySentNotify
 			syscall.Kill(initProcPid, syscall.SIGKILL)
 			// 取消挂载
-			prefix := fmt.Sprintf("/var/lib/podkit/container/%d", ContainerID)
+			prefix := fmt.Sprintf("/var/lib/podkit/container/%d", containerID)
 		p0:
 			err = syscall.Unmount(fmt.Sprintf("%s/etc/resolv.conf", prefix), 0)
 			if err != nil {
@@ -180,7 +180,7 @@ func RunServer(initProcPid int, sendWhenListenFinished chan struct{}, sendWhenLi
 			}
 			goto out
 		case *commpacket.PacketClientExecBackgroundRequest:
-			pidNS, err := syscall.Open(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/pid", ContainerID), os.O_RDONLY, 0)
+			pidNS, err := syscall.Open(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/pid", containerID), os.O_RDONLY, 0)
 			if err != nil {
 				panic(err)
 			}
@@ -192,10 +192,10 @@ func RunServer(initProcPid int, sendWhenListenFinished chan struct{}, sendWhenLi
 
 			pipeReader, pipeWriter := io.Pipe()
 			//cmd := exec.Command("podkit_shim", "exec", "back", fmt.Sprintf("%d", ContainerID), packet.Command)
-			args := []string{fmt.Sprint(ContainerID), packet.Command}
+			args := []string{fmt.Sprint(containerID), packet.Command}
 			args = append(args, packet.Args...)
 			cmd := exec.Command("podkit_shim_exec_back", args...)
-			cmd.Env = []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME=/root", "HOSTNAME=container" + fmt.Sprint(ContainerID)}
+			cmd.Env = []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME=/root", "HOSTNAME=container" + fmt.Sprint(containerID)}
 			// stdout用来通知是否有这个命令
 			cmd.Stdout = pipeWriter
 			err = cmd.Start()
@@ -217,7 +217,7 @@ func RunServer(initProcPid int, sendWhenListenFinished chan struct{}, sendWhenLi
 			c.Close()
 			continue
 		case *commpacket.PacketClientExecInteractiveRequest:
-			ptyMasterFile, err := os.OpenFile(fmt.Sprintf("/var/lib/podkit/container/%d/dev/pts/ptmx", ContainerID), os.O_RDWR, 0)
+			ptyMasterFile, err := os.OpenFile(fmt.Sprintf("/var/lib/podkit/container/%d/dev/pts/ptmx", containerID), os.O_RDWR, 0)
 			if err != nil {
 				panic(err)
 			}
@@ -232,12 +232,12 @@ func RunServer(initProcPid int, sendWhenListenFinished chan struct{}, sendWhenLi
 				panic(err)
 			}
 
-			ptySlaveFile, err := os.OpenFile(fmt.Sprintf("/var/lib/podkit/container/%d/dev/pts/%d", ContainerID, ptySlaveFd), os.O_RDWR|syscall.O_NOCTTY, 0)
+			ptySlaveFile, err := os.OpenFile(fmt.Sprintf("/var/lib/podkit/container/%d/dev/pts/%d", containerID, ptySlaveFd), os.O_RDWR|syscall.O_NOCTTY, 0)
 			if err != nil {
 				panic(err)
 			}
 
-			pidNS, err := syscall.Open(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/pid", ContainerID), os.O_RDONLY, 0)
+			pidNS, err := syscall.Open(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/pid", containerID), os.O_RDONLY, 0)
 			if err != nil {
 				panic(err)
 			}
@@ -248,10 +248,10 @@ func RunServer(initProcPid int, sendWhenListenFinished chan struct{}, sendWhenLi
 			}
 
 			pipeReader, pipeWriter := io.Pipe()
-			args := []string{fmt.Sprint(ContainerID), packet.Command}
+			args := []string{fmt.Sprint(containerID), packet.Command}
 			args = append(args, packet.Args...)
 			cmd := exec.Command("podkit_shim_exec_front", args...)
-			cmd.Env = []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME=/root", "HOSTNAME=container" + fmt.Sprint(ContainerID)}
+			cmd.Env = []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME=/root", "HOSTNAME=container" + fmt.Sprint(containerID)}
 			if packet.TermEnv != nil {
 				cmd.Env = append(cmd.Env, "TERM="+*packet.TermEnv)
 			}

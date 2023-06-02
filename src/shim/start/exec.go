@@ -11,20 +11,20 @@ import (
 )
 
 // 被设置了path
-func execBackground(commandPath string) {
-	ipcNS, err := syscall.Open(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/ipc", ContainerID), syscall.O_RDONLY, 0)
+func execBackground(containerID int, commandPath string) {
+	ipcNS, err := syscall.Open(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/ipc", containerID), syscall.O_RDONLY, 0)
 	if err != nil {
 		panic(err)
 	}
-	mntNS, err := syscall.Open(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/mnt", ContainerID), syscall.O_RDONLY, 0)
+	mntNS, err := syscall.Open(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/mnt", containerID), syscall.O_RDONLY, 0)
 	if err != nil {
 		panic(err)
 	}
-	pidNS, err := syscall.Open(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/pid", ContainerID), syscall.O_RDONLY, 0)
+	pidNS, err := syscall.Open(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/pid", containerID), syscall.O_RDONLY, 0)
 	if err != nil {
 		panic(err)
 	}
-	utsNS, err := syscall.Open(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/uts", ContainerID), syscall.O_RDONLY, 0)
+	utsNS, err := syscall.Open(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/uts", containerID), syscall.O_RDONLY, 0)
 	if err != nil {
 		panic(err)
 	}
@@ -54,7 +54,7 @@ func execBackground(commandPath string) {
 		syscall.CloseOnExec(int(i))
 	}
 
-	err = syscall.Chroot(fmt.Sprintf("/var/lib/podkit/container/%d", ContainerID))
+	err = syscall.Chroot(fmt.Sprintf("/var/lib/podkit/container/%d", containerID))
 	if err != nil {
 		panic(err)
 	}
@@ -83,20 +83,20 @@ func execBackground(commandPath string) {
 }
 
 // 被设置了path
-func execFrontground(commandPath string, ptyNum int) {
-	ipcNS, err := syscall.Open(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/ipc", ContainerID), syscall.O_RDONLY, 0)
+func execFrontground(containerID int, commandPath string, ptyNum int) {
+	ipcNS, err := syscall.Open(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/ipc", containerID), syscall.O_RDONLY, 0)
 	if err != nil {
 		panic(err)
 	}
-	mntNS, err := syscall.Open(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/mnt", ContainerID), syscall.O_RDONLY, 0)
+	mntNS, err := syscall.Open(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/mnt", containerID), syscall.O_RDONLY, 0)
 	if err != nil {
 		panic(err)
 	}
-	pidNS, err := syscall.Open(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/pid", ContainerID), syscall.O_RDONLY, 0)
+	pidNS, err := syscall.Open(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/pid", containerID), syscall.O_RDONLY, 0)
 	if err != nil {
 		panic(err)
 	}
-	utsNS, err := syscall.Open(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/uts", ContainerID), syscall.O_RDONLY, 0)
+	utsNS, err := syscall.Open(fmt.Sprintf("/var/lib/podkit/container/%d/proc/1/ns/uts", containerID), syscall.O_RDONLY, 0)
 	if err != nil {
 		panic(err)
 	}
@@ -118,7 +118,7 @@ func execFrontground(commandPath string, ptyNum int) {
 		panic(err)
 	}
 
-	err = syscall.Chroot(fmt.Sprintf("/var/lib/podkit/container/%d", ContainerID))
+	err = syscall.Chroot(fmt.Sprintf("/var/lib/podkit/container/%d", containerID))
 	if err != nil {
 		panic(err)
 	}
