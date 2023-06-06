@@ -41,7 +41,7 @@ func startStage1(containerID int, ipaddr string) {
 	}
 }
 
-// stage2: 需要fork一个子进程作为容器的init进程(podkit_orphan_reaper), 同时监听过来的网络连接, 向容器插入进程
+// stage2: 需要fork一个子进程作为容器的init进程(podkit_orphan_reaper), 同时-iru监听过来的网络连接, 向容器插入进程
 func startStage2(containerID int, ipaddr string) {
 	syscall.Umask(0)
 
@@ -255,10 +255,10 @@ func startStage3(containerID int, ipaddr string) {
 	if err != nil {
 		panic(err)
 	}
-	err = unix.Mknod(fmt.Sprintf("%s/dev/console", prefix), 0640|syscall.S_IFCHR, int(tools.MakeDev(136, 0)))
-	if err != nil {
-		panic(err)
-	}
+	// err = unix.Mknod(fmt.Sprintf("%s/dev/console", prefix), 0640|syscall.S_IFCHR, int(tools.MakeDev(136, 0)))
+	// if err != nil {
+	// 	panic(err)
+	// }
 	err = unix.Mknod(fmt.Sprintf("%s/dev/random", prefix), 0666|syscall.S_IFCHR, int(tools.MakeDev(1, 8)))
 	if err != nil {
 		panic(err)
@@ -281,6 +281,28 @@ func startStage3(containerID int, ipaddr string) {
 		panic(err)
 	}
 	err = syscall.Symlink("pts/ptmx", "ptmx")
+	if err != nil {
+		panic(err)
+	}
+
+	err = syscall.Symlink("/proc/self/fd", "fd")
+	if err != nil {
+		panic(err)
+	}
+
+	err = syscall.Symlink("/proc/self/fd/0", "stdin")
+	if err != nil {
+		panic(err)
+	}
+	err = syscall.Symlink("/proc/self/fd/1", "stdout")
+	if err != nil {
+		panic(err)
+	}
+	err = syscall.Symlink("/proc/self/fd/2", "stderr")
+	if err != nil {
+		panic(err)
+	}
+	err = syscall.Symlink("/proc/kcore", "core")
 	if err != nil {
 		panic(err)
 	}
