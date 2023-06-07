@@ -39,4 +39,5 @@ clean:
 	rm -f /bin/podkit_shim
 	rm -f /bin/podkit_shim_exec_back
 	rm -f /bin/podkit_shim_exec_front
+	rm -f /bin/podkit_lock_keeper
 	rm -rf /var/lib/podkit
