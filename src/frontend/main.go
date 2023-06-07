@@ -14,6 +14,8 @@ import (
 	"podkit/frontend/tools"
 	"syscall"
 
+	"github.com/coreos/go-iptables/iptables"
+	"github.com/lorenzosaino/go-sysctl"
 	"github.com/milosgajdos/tenus"
 	"github.com/spf13/cobra"
 )
@@ -109,16 +111,17 @@ func main() {
 			panic(err)
 		}
 
-		// TODO: 使用naive的轮子
-		iptablesCMD := exec.Command("iptables", "-t", "nat", "-A", "POSTROUTING", "-s", "172.16.0.0/16", "-j", "MASQUERADE")
-		err = iptablesCMD.Run()
+		table, err := iptables.New()
 		if err != nil {
 			panic(err)
 		}
 
-		// TODO: 使用naive的轮子
-		sysctlCMD := exec.Command("sysctl", "-w", "net.ipv4.ip_forward=1")
-		err = sysctlCMD.Run()
+		err = table.Append("nat", "POSTROUTING", "-s", "172.16.0.0/16", "-j", "MASQUERADE")
+		if err != nil {
+			panic(err)
+		}
+
+		err = sysctl.Set("net.ipv4.ip_forward", "1")
 		if err != nil {
 			panic(err)
 		}

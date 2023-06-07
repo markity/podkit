@@ -1,7 +1,11 @@
 package start
 
 import (
+	"archive/tar"
+	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"podkit/frontend/json_struct"
@@ -80,7 +84,8 @@ var StartCmd = &cobra.Command{
 			}
 		}
 
-		err = os.Mkdir(fmt.Sprintf("/var/lib/podkit/container/%d", currentContainerID), 0755)
+		containerFloder := fmt.Sprintf("/var/lib/podkit/container/%d", currentContainerID)
+		err = os.Mkdir(containerFloder, 0755)
 		if err != nil {
 			panic(err)
 		}
@@ -90,10 +95,64 @@ var StartCmd = &cobra.Command{
 		fmt.Printf("Extracting %v\n", imageFilePath)
 
 		// TODO: 用golang提供的函数解压
-		err = exec.Command("tar", "-xvf", imageFilePath, "-C", fmt.Sprintf("/var/lib/podkit/container/%d", currentContainerID)).Run()
+		imageFile, err := os.OpenFile(imageFilePath, os.O_RDONLY, 0)
 		if err != nil {
 			panic(err)
 		}
+
+		err = os.Chdir(containerFloder)
+		if err != nil {
+			panic(err)
+		}
+
+		// 做解压
+		linkMap := make(map[string]string)
+		symlinkMap := make(map[string]string)
+		tarReader := tar.NewReader(imageFile)
+		for {
+			header, err := tarReader.Next()
+			if err != nil {
+				if err == io.EOF {
+					// 解压完毕
+					break
+				}
+				// 未知错误
+				panic(err)
+			}
+			switch header.Typeflag {
+			case tar.TypeReg:
+				f, err := os.OpenFile(header.Name, os.O_WRONLY|os.O_CREATE, fs.FileMode(header.Mode))
+				if err != nil {
+					panic(err)
+				}
+				_, err = io.Copy(f, tarReader)
+				if err != nil {
+					panic(err)
+				}
+				f.Close()
+			case tar.TypeDir:
+				err := os.Mkdir(header.Name, fs.FileMode(header.Mode))
+				if err != nil {
+					panic(err)
+				}
+			case tar.TypeSymlink:
+				symlinkMap[header.Name] = header.Linkname
+			case tar.TypeLink:
+				linkMap[header.Name] = header.Linkname
+			default:
+				panic(errors.New("unreachable"))
+			}
+		}
+		for k, v := range linkMap {
+			os.Link(v, k)
+		}
+		for k, v := range symlinkMap {
+			os.Symlink(v, k)
+		}
+		// err = exec.Command("tar", "-xvf", imageFilePath, "-C", fmt.Sprintf("/var/lib/podkit/container/%d", currentContainerID)).Run()
+		// if err != nil {
+		// 	panic(err)
+		// }
 
 		// 开启shim程序, 等待stage1执行完毕, stage1执行完毕后socket文件已经创建且进入监听状态
 		shimCmd := exec.Command("podkit_shim", "start", "stage1", fmt.Sprintf("%d", currentContainerID), ipFetched)
