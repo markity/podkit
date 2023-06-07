@@ -1,8 +1,8 @@
 ### PodKit
 
-### 当前状态
+模仿docker, 实现最基本的功能, 只能在linux系统上使用。
 
-docker的拙劣模仿, 正在施工...预计使用以下机制:
+### 当前状态
 
 - linux namespace隔离
     - ipc - OK
