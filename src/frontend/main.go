@@ -73,6 +73,7 @@ func main() {
 		newRunning := make([]*json_struct.ContainerInfo, 0)
 		newStopped := make([]*json_struct.ContainerInfo, 0)
 		newStopped = append(newStopped, runningInfo.ContainerStopped...)
+		newStopped = append(newStopped, runningInfo.ContainerRunning...)
 		for _, v := range runningInfo.ContainerRunning {
 			prefix := fmt.Sprintf("/var/lib/podkit/container/%d", v.ContainerID)
 			syscall.Unmount(fmt.Sprintf("%s/etc/resolv.conf", prefix), 0)
